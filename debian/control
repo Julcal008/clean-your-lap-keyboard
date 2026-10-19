@@ -1,0 +1,37 @@
+Source: clean-your-lap-keyboard
+Section: utils
+Priority: optional
+Maintainer: Julcal008 <julcalderon3008@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ meson (>= 0.62),
+ ninja-build,
+ pkg-config,
+ libgtk-4-dev (>= 4.8),
+ libadwaita-1-dev (>= 1.2),
+ libudev-dev,
+ libglib2.0-dev,
+ gettext,
+ desktop-file-utils,
+ appstream
+Rules-Requires-Root: no
+Standards-Version: 4.6.2
+Homepage: https://github.com/julcal008/clean-your-lap-keyboard
+Vcs-Browser: https://github.com/julcal008/clean-your-lap-keyboard
+Vcs-Git: https://github.com/julcal008/clean-your-lap-keyboard.git
+
+Package: clean-your-lap-keyboard
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ pkexec | policykit-1 | polkitd
+Description: temporarily disable the built-in laptop keyboard for cleaning
+ Clean Your Lap Keyboard grabs the internal keyboard of a laptop so the keys
+ can be wiped without typing anything, while the touchpad and external
+ keyboards keep working.
+ .
+ The keyboard is released after the selected duration, when Stop is pressed,
+ when Esc is held for two seconds, and when the screen locks, the computer
+ suspends, or the session becomes inactive. A small helper performs only the
+ evdev grab and never reads key events.

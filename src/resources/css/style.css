@@ -1,0 +1,254 @@
+/* Clean Your Lap Keyboard — compact, Apple-leaning UI. */
+
+.cylk-window {
+  background: @window_bg_color;
+}
+
+.cylk-header {
+  background: transparent;
+  border-bottom: 1px solid alpha(@borders, 0.55);
+  box-shadow: none;
+  min-height: 38px;
+}
+
+.cylk-title {
+  color: @window_fg_color;
+  font-size: 23pt;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.cylk-subtitle {
+  color: alpha(@window_fg_color, 0.62);
+  font-size: 10.5pt;
+  line-height: 1.35;
+}
+
+.cylk-page-title {
+  color: @window_fg_color;
+  font-size: 18pt;
+  font-weight: 700;
+}
+
+.cylk-muted {
+  color: alpha(@window_fg_color, 0.58);
+  font-size: 9pt;
+  font-weight: 600;
+}
+
+.cylk-footnote {
+  color: alpha(@window_fg_color, 0.50);
+  font-size: 8.5pt;
+}
+
+.cylk-card {
+  background: @card_bg_color;
+  border: 1px solid alpha(@borders, 0.75);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px alpha(black, 0.05);
+  min-height: 54px;
+  padding: 6px 10px;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.cylk-card:hover {
+  background: alpha(@window_fg_color, 0.045);
+  border-color: alpha(@borders, 1);
+}
+
+.cylk-card:active {
+  background: alpha(@window_fg_color, 0.075);
+}
+
+.cylk-card-title {
+  color: @window_fg_color;
+  font-size: 10.5pt;
+  font-weight: 600;
+}
+
+.cylk-card-subtitle {
+  color: alpha(@window_fg_color, 0.55);
+  font-size: 8.8pt;
+}
+
+.cylk-segmented {
+  background: alpha(@window_fg_color, 0.055);
+  border: 1px solid alpha(@borders, 0.45);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.cylk-segmented button {
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  box-shadow: none;
+  color: alpha(@window_fg_color, 0.72);
+  font-size: 9.2pt;
+  font-weight: 600;
+  min-height: 30px;
+  min-width: 64px;
+  padding: 0 14px;
+  transition: background 130ms ease, color 130ms ease;
+}
+
+.cylk-segmented button:hover {
+  background: alpha(@window_fg_color, 0.06);
+}
+
+.cylk-segmented button:checked {
+  background: @card_bg_color;
+  box-shadow: 0 1px 3px alpha(black, 0.12);
+  color: @window_fg_color;
+}
+
+button.cylk-primary {
+  background: @accent_bg_color;
+  border: none;
+  border-radius: 11px;
+  box-shadow: 0 2px 5px alpha(@accent_bg_color, 0.22);
+  color: @accent_fg_color;
+  font-size: 10.5pt;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 18px;
+  transition: background 130ms ease;
+}
+
+button.cylk-primary:hover {
+  background: shade(@accent_bg_color, 1.08);
+}
+
+button.cylk-primary:active {
+  background: shade(@accent_bg_color, 0.92);
+}
+
+button.cylk-primary:disabled {
+  background: alpha(@accent_bg_color, 0.40);
+  box-shadow: none;
+}
+
+button.cylk-secondary {
+  background: alpha(@window_fg_color, 0.065);
+  border: 1px solid alpha(@borders, 0.65);
+  border-radius: 10px;
+  box-shadow: none;
+  color: @window_fg_color;
+  font-size: 10pt;
+  font-weight: 600;
+  min-height: 40px;
+  padding: 0 18px;
+  transition: background 130ms ease;
+}
+
+button.cylk-secondary:hover {
+  background: alpha(@window_fg_color, 0.10);
+}
+
+button.cylk-secondary:active {
+  background: alpha(@window_fg_color, 0.14);
+}
+
+button.cylk-secondary:disabled {
+  color: alpha(@window_fg_color, 0.42);
+}
+
+.cylk-countdown {
+  color: @accent_color;
+  font-size: 70pt;
+  font-weight: 200;
+  margin-bottom: 2px;
+}
+
+.cylk-ring-time {
+  color: @window_fg_color;
+  font-size: 27pt;
+  font-weight: 300;
+}
+
+.cylk-chip {
+  background: alpha(@accent_bg_color, 0.13);
+  border-radius: 99px;
+  color: @accent_color;
+  font-size: 8.8pt;
+  font-weight: 700;
+  padding: 4px 11px;
+}
+
+.cylk-done-icon {
+  color: @accent_color;
+}
+
+.cylk-info-icon {
+  color: #e5a50a;
+}
+
+popover.cylk-popover > contents {
+  background: @popover_bg_color;
+  border: 1px solid alpha(@borders, 0.70);
+  border-radius: 16px;
+  box-shadow: 0 8px 28px alpha(black, 0.18);
+  padding: 4px;
+}
+
+.cylk-popover-title {
+  color: alpha(@window_fg_color, 0.58);
+  font-size: 8.8pt;
+  font-weight: 700;
+  margin: 2px 8px 2px 8px;
+}
+
+.cylk-device-list {
+  background: transparent;
+}
+
+.cylk-device-list row {
+  border-radius: 10px;
+  padding: 2px 6px;
+  transition: background 120ms ease;
+}
+
+.cylk-device-list row:hover {
+  background: alpha(@window_fg_color, 0.055);
+}
+
+.cylk-device-list row:active {
+  background: alpha(@window_fg_color, 0.09);
+}
+
+.cylk-device-name {
+  color: @window_fg_color;
+  font-size: 9.5pt;
+  font-weight: 600;
+}
+
+.cylk-device-meta {
+  color: alpha(@window_fg_color, 0.48);
+  font-size: 8.2pt;
+}
+
+.cylk-badge {
+  background: alpha(@accent_bg_color, 0.14);
+  border-radius: 99px;
+  color: @accent_color;
+  font-size: 7.5pt;
+  font-weight: 700;
+  padding: 2px 7px;
+}
+
+.cylk-badge-external {
+  background: alpha(@window_fg_color, 0.075);
+  color: alpha(@window_fg_color, 0.60);
+}
+
+.cylk-dark .cylk-card {
+  box-shadow: 0 1px 3px alpha(black, 0.22);
+}
+
+.cylk-dark button.cylk-primary {
+  box-shadow: 0 2px 7px alpha(black, 0.35);
+}
+
+.cylk-dark button.cylk-secondary {
+  border-color: alpha(@borders, 0.9);
+}

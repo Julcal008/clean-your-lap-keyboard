@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Clean Your Lap Keyboard
+GenericName=Keyboard Cleaning Tool
+Comment=Temporarily disable the built-in keyboard to clean it safely
+Exec=cylk
+Icon=io.github.julcal008.CleanYourLapKeyboard
+Terminal=false
+Categories=Utility;
+Keywords=keyboard;clean;cleaning;laptop;disable;lock;
+StartupNotify=true

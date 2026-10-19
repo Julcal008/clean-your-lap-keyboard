@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/io/github/julcal008/CleanYourLapKeyboard">
+    <file>css/style.css</file>
+    <file>icons/hero.svg</file>
+    <file>icons/check.svg</file>
+  </gresource>
+</gresources>

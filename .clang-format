@@ -1,0 +1,8 @@
+BasedOnStyle: LLVM
+IndentWidth: 2
+ColumnLimit: 90
+BreakBeforeBraces: Linux
+SpaceBeforeParens: ControlStatements
+PointerAlignment: Right
+SortIncludes: true
+IncludeBlocks: Preserve

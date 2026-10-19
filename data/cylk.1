@@ -1,0 +1,105 @@
+.TH CYLK 1 "2026-10-19" "cylk 0.1.0" "User Commands"
+.SH NAME
+cylk \- temporarily disable the built-in laptop keyboard for cleaning
+.SH SYNOPSIS
+.B cylk
+[\fIOPTION\fR...]
+.SH DESCRIPTION
+.B cylk
+grabs the internal evdev keyboard of a laptop so that the keys can be cleaned
+while the computer is running. The touchpad and external keyboards keep
+working.
+.PP
+The keyboard is released automatically when the selected duration ends, when
+the Stop button is pressed, when Esc is held for two seconds, when the window
+is closed, when the app exits, or when logind reports a screen lock, suspend,
+or inactive session. A small privileged helper, launched on demand through
+.BR pkexec (1),
+performs only the evdev grab and does not read key events.
+.PP
+A three-second countdown is shown before the grab. The default duration is 60
+seconds and can be set to 30, 60, or 120 seconds.
+.SH OPTIONS
+.TP
+.BR \-l ", " \-\-list
+Print the detected keyboards and exit. Each line contains the classification
+(internal or external), evdev path, device name, detection score, bus, and
+hardware path.
+.TP
+.BR \-d " " \fIPATH\fR ", " \-\-device= \fIPATH\fR
+Use the evdev device at
+.IR PATH .
+The path can also be a udev hardware identifier such as
+.IR platform-i8042-serio-0 .
+.TP
+.B \-\-duration=\fISECONDS\fR
+Set the cleaning duration. Valid values are 30, 60, and 120.
+.TP
+.B \-\-demo=\fISTATE\fR
+Preview the interface without grabbing a keyboard. Valid states are
+.IR idle ,
+.IR countdown ,
+.IR cleaning ,
+and
+.IR done .
+.TP
+.B \-\-quit-after=\fISECONDS\fR
+Close the application automatically after the given number of seconds. This
+option is intended for testing and screenshots.
+.TP
+.BR \-h ", " \-\-help
+Show a summary of the options.
+.SH SAFETY
+The privileged helper checks that the requested path is a char device in
+/dev/input with a full keyboard capability bitmap. It waits for all keys to be
+released, takes an exclusive
+.B EVIOCGRAB
+grab, drops privileges to the invoking user, sets
+.BR PR_SET_NO_NEW_PRIVS ,
+and clears the dumpable flag.
+.PP
+The helper enforces its own maximum duration of the selected duration plus five
+seconds. Closing its standard input or its file descriptor releases the grab;
+the kernel also releases an evdev grab when the process exits, so the keyboard
+is restored even if the graphical interface crashes.
+.PP
+The application does not read, log, or transmit key presses. It polls the key
+state only to detect the held-Esc release gesture.
+.SH FILES
+.TP
+.I ~/.config/clean-your-lap-keyboard/settings.ini
+Persisted duration and manually selected keyboard.
+.TP
+.I /usr/share/polkit-1/actions/io.github.julcal008.CleanYourLapKeyboard.policy
+Polkit policy for the privileged helper.
+.TP
+.I /usr/libexec/clean-your-lap-keyboard/cylk-helper
+Privileged helper. The exact path depends on the distribution and installation
+prefix.
+.SH EXAMPLES
+List the available keyboards:
+.PP
+.nf
+    cylk --list
+.fi
+.PP
+Clean the internal keyboard for two minutes, using an explicit device:
+.PP
+.nf
+    cylk --device /dev/input/event4 --duration 120
+.fi
+.PP
+Preview the cleaning screen without touching the keyboard:
+.PP
+.nf
+    cylk --demo=cleaning
+.fi
+.SH SEE ALSO
+.BR pkexec (1),
+.BR loginctl (1),
+.BR udevadm (8)
+.PP
+Project home page:
+.IR https://github.com/julcal008/clean-your-lap-keyboard
+.SH LICENSE
+GPL-3.0-or-later.

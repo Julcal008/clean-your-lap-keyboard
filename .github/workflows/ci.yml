@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Fedora 44
+            container: fedora:44
+          - name: Debian 12
+            container: debian:12
+          - name: Ubuntu 24.04
+            container: ubuntu:24.04
+          - name: Arch Linux
+            container: archlinux:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Fedora)
+        if: contains(matrix.container, 'fedora')
+        run: |
+          dnf install -y gcc meson ninja-build gettext desktop-file-utils \
+            appstream gtk4-devel libadwaita-devel systemd-devel
+
+      - name: Install dependencies (Debian/Ubuntu)
+        if: contains(matrix.container, 'debian') || contains(matrix.container, 'ubuntu')
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential meson ninja-build pkg-config gettext \
+            desktop-file-utils appstream libgtk-4-dev libadwaita-1-dev \
+            libudev-dev libglib2.0-dev
+
+      - name: Install dependencies (Arch)
+        if: contains(matrix.container, 'archlinux')
+        run: |
+          pacman -Syu --noconfirm --needed base-devel meson ninja gettext \
+            desktop-file-utils appstream gtk4 libadwaita systemd-libs
+
+      - name: Configure
+        run: meson setup build --buildtype=release -Dtests=true
+
+      - name: Build
+        run: meson compile -C build
+
+      - name: Test
+        run: meson test -C build --print-errorlogs
+
+      - name: Validate desktop and AppStream metadata
+        run: |
+          desktop-file-validate \
+            build/data/io.github.julcal008.CleanYourLapKeyboard.desktop
+          appstreamcli validate --no-net \
+            build/data/io.github.julcal008.CleanYourLapKeyboard.metainfo.xml

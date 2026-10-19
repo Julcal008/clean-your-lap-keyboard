@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policyconfig>
+  <vendor>Clean Your Lap Keyboard</vendor>
+  <vendor_url>https://github.com/julcal008/clean-your-lap-keyboard</vendor_url>
+
+  <action id="io.github.julcal008.CleanYourLapKeyboard.grab-keyboard">
+    <description>Disable the built-in keyboard temporarily</description>
+    <message>Authentication is required to disable the built-in keyboard while the laptop is on.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">@HELPER_PATH@</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">false</annotate>
+  </action>
+</policyconfig>

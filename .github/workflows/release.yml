@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  fedora-rpm:
+    runs-on: ubuntu-latest
+    container: fedora:44
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          dnf install -y gcc meson ninja-build gettext desktop-file-utils \
+            appstream rpm-build gtk4-devel libadwaita-devel systemd-devel
+      - name: Build source archive
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p ~/rpmbuild/SOURCES
+          tar --exclude-vcs --exclude=build --exclude='build-*' \
+            --exclude='obj-*' --exclude=dist --exclude=pkgroot \
+            --exclude='*.deb' --exclude='*.rpm' \
+            --transform "s,^,clean-your-lap-keyboard-${version}/," \
+            -czf ~/rpmbuild/SOURCES/clean-your-lap-keyboard-${version}.tar.gz .
+      - name: Build RPM
+        run: |
+          rpmbuild -ba packaging/fedora/clean-your-lap-keyboard.spec
+          mkdir -p artifacts
+          cp ~/rpmbuild/RPMS/*/*.rpm artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fedora-rpm
+          path: artifacts/*.rpm
+
+  debian-deb:
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential debhelper dpkg-dev meson ninja-build pkg-config \
+            gettext desktop-file-utils appstream libgtk-4-dev \
+            libadwaita-1-dev libudev-dev libglib2.0-dev
+      - name: Build DEB
+        run: dpkg-buildpackage -us -uc -b
+      - name: Collect package
+        run: |
+          mkdir -p artifacts
+          cp ../*.deb artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian-deb
+          path: artifacts/*.deb
+
+  arch-package:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed base-devel meson ninja gettext \
+            desktop-file-utils appstream gtk4 libadwaita polkit systemd-libs
+          useradd -m builder
+          chown -R builder:builder .
+      - name: Build package
+        run: |
+          cp packaging/arch/PKGBUILD .
+          su builder -c 'makepkg -s --noconfirm'
+          mkdir -p artifacts
+          cp *.pkg.tar.zst artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: artifacts/*.pkg.tar.zst
+
+  publish:
+    needs: [fedora-rpm, debian-deb, arch-package]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

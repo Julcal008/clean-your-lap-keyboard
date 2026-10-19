@@ -1,0 +1,261 @@
+# Spanish translation for Clean Your Lap Keyboard.
+# Copyright (C) 2026 Julcal008
+# This file is distributed under the same license as the package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: clean-your-lap-keyboard 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/julcal008/clean-your-lap-keyboard/issues\n"
+"POT-Creation-Date: 2026-10-19 00:00+0000\n"
+"PO-Revision-Date: 2026-10-19 00:00+0000\n"
+"Last-Translator: Julcal008 <julcalderon3008@gmail.com>\n"
+"Language-Team: Spanish\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/main.c
+msgid "Unknown demo state “%s”. Use idle, countdown, cleaning or done."
+msgstr "Estado de demostración desconocido «%s». Usa idle, countdown, cleaning o done."
+
+#: src/main.c
+msgid "Duration must be 30, 60 or 120 seconds."
+msgstr "La duración debe ser de 30, 60 o 120 segundos."
+
+#: src/main.c
+msgid "Could not scan input devices: %s\n"
+msgstr "No se pudieron buscar dispositivos de entrada: %s\n"
+
+#: src/main.c
+msgid "unknown error"
+msgstr "error desconocido"
+
+#: src/main.c
+msgid "No keyboards detected."
+msgstr "No se detectaron teclados."
+
+#: src/main.c
+msgid "List detected keyboards and exit"
+msgstr "Muestra los teclados detectados y sale"
+
+#: src/main.c
+msgid "Use the keyboard at PATH"
+msgstr "Usa el teclado en RUTA"
+
+#: src/main.c
+msgid "PATH"
+msgstr "RUTA"
+
+#: src/main.c
+msgid "Cleaning duration: 30, 60 or 120 seconds"
+msgstr "Duración de la limpieza: 30, 60 o 120 segundos"
+
+#: src/main.c
+msgid "SECONDS"
+msgstr "SEGUNDOS"
+
+#: src/main.c
+msgid "Preview a UI state: idle, countdown, cleaning or done"
+msgstr "Previsualiza un estado de la interfaz: idle, countdown, cleaning o done"
+
+#: src/main.c
+msgid "STATE"
+msgstr "ESTADO"
+
+#: src/main.c
+msgid "Close automatically after SECONDS (testing)"
+msgstr "Cierra automáticamente tras SEGUNDOS (pruebas)"
+
+#: src/main.c
+msgid "[OPTION…]"
+msgstr "[OPCIÓN…]"
+
+#: src/main.c
+msgid "Temporarily disable the built-in laptop keyboard so it can be cleaned."
+msgstr "Desactiva temporalmente el teclado integrado del portátil para poder limpiarlo."
+
+#: src/window.c
+msgid "Keyboard to disable"
+msgstr "Teclado que se desactivará"
+
+#: src/window.c
+msgid "Cleaning time"
+msgstr "Tiempo de limpieza"
+
+#: src/window.c
+msgid "30 s"
+msgstr "30 s"
+
+#: src/window.c
+msgid "60 s"
+msgstr "60 s"
+
+#: src/window.c
+msgid "2 min"
+msgstr "2 min"
+
+#: src/window.c
+msgid "Clean your keyboard"
+msgstr "Limpia tu teclado"
+
+#: src/window.c
+msgid "Disable the built-in keyboard so you can wipe it safely."
+msgstr "Desactiva el teclado integrado para limpiarlo con seguridad."
+
+#: src/window.c
+msgid "Start cleaning"
+msgstr "Empezar limpieza"
+
+#: src/window.c
+msgid "External keyboards and the touchpad stay active."
+msgstr "Los teclados externos y el panel táctil siguen activos."
+
+#: src/window.c
+msgid "Hold Esc for 2 seconds to stop."
+msgstr "Mantén Esc durante 2 segundos para detener."
+
+#: src/window.c
+msgid "Get ready…"
+msgstr "Prepárate…"
+
+#: src/window.c
+msgid "The keyboard will be disabled in a moment."
+msgstr "El teclado se desactivará en un momento."
+
+#: src/window.c
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: src/window.c
+msgid "Keyboard disabled"
+msgstr "Teclado desactivado"
+
+#: src/window.c
+msgid "Wipe the keys gently.\nTouchpad and external keyboards still work."
+msgstr "Limpia las teclas con suavidad.\nEl panel táctil y los teclados externos siguen funcionando."
+
+#: src/window.c
+msgid "Cleaning mode active"
+msgstr "Modo limpieza activo"
+
+#: src/window.c
+msgid "Stop cleaning"
+msgstr "Detener limpieza"
+
+#: src/window.c
+msgid "All clean"
+msgstr "Todo limpio"
+
+#: src/window.c
+msgid "Your keyboard is back."
+msgstr "Tu teclado vuelve a funcionar."
+
+#: src/window.c
+msgid "Done"
+msgstr "Listo"
+
+#: src/window.c data/io.github.julcal008.CleanYourLapKeyboard.desktop.in
+msgid "Clean Your Lap Keyboard"
+msgstr "Clean Your Lap Keyboard"
+
+#: src/window.c
+msgid "No keyboard detected"
+msgstr "No se detectó ningún teclado"
+
+#: src/window.c
+msgid "Connect a keyboard and reopen the app."
+msgstr "Conecta un teclado y vuelve a abrir la aplicación."
+
+#: src/window.c
+msgid "Internal keyboard"
+msgstr "Teclado interno"
+
+#: src/window.c
+msgid "External keyboard"
+msgstr "Teclado externo"
+
+#: src/window.c
+msgid "No keyboards found."
+msgstr "No se encontraron teclados."
+
+#: src/window.c
+msgid "Internal"
+msgstr "Interno"
+
+#: src/window.c
+msgid "External"
+msgstr "Externo"
+
+#: src/window.c
+msgid "The requested keyboard was not found."
+msgstr "No se encontró el teclado solicitado."
+
+#: src/window.c
+msgid "Something went wrong."
+msgstr "Algo salió mal."
+
+#: src/window.c
+msgid "Cleaning stopped"
+msgstr "Limpieza detenida"
+
+#: src/window.c
+msgid "Stopping…"
+msgstr "Deteniendo…"
+
+#: src/window.c
+msgid "Keyboard restored"
+msgstr "Teclado restaurado"
+
+#: src/window.c
+msgid "Starting…"
+msgstr "Iniciando…"
+
+#: src/window.c
+msgid "Waiting for permission…"
+msgstr "Esperando permiso…"
+
+#: src/window.c
+msgid "Cleaning stopped because the screen was locked."
+msgstr "La limpieza se detuvo porque se bloqueó la pantalla."
+
+#: src/window.c
+msgid "Cleaning stopped before the computer went to sleep."
+msgstr "La limpieza se detuvo antes de que el equipo entrara en suspensión."
+
+#: src/window.c
+msgid "Cleaning stopped because the session became inactive."
+msgstr "La limpieza se detuvo porque la sesión dejó de estar activa."
+
+#: data/io.github.julcal008.CleanYourLapKeyboard.desktop.in
+msgid "Keyboard Cleaning Tool"
+msgstr "Herramienta para limpiar el teclado"
+
+#: data/io.github.julcal008.CleanYourLapKeyboard.desktop.in
+msgid "Temporarily disable the built-in keyboard to clean it safely"
+msgstr "Desactiva temporalmente el teclado integrado para limpiarlo con seguridad"
+
+#: data/io.github.julcal008.CleanYourLapKeyboard.desktop.in
+msgid "keyboard;clean;cleaning;laptop;disable;lock;"
+msgstr "teclado;limpiar;limpieza;portátil;desactivar;bloquear;"
+
+#: data/io.github.julcal008.CleanYourLapKeyboard.metainfo.xml.in
+msgid "Temporarily disable the built-in laptop keyboard so it can be cleaned"
+msgstr "Desactiva temporalmente el teclado integrado del portátil para poder limpiarlo"
+
+#: data/io.github.julcal008.CleanYourLapKeyboard.metainfo.xml.in
+msgid "Clean Your Lap Keyboard temporarily grabs the internal keyboard of a laptop so the keys can be wiped without typing anything."
+msgstr "Clean Your Lap Keyboard captura temporalmente el teclado interno del portátil para poder limpiar las teclas sin escribir nada."
+
+#: data/io.github.julcal008.CleanYourLapKeyboard.metainfo.xml.in
+msgid "The touchpad and external keyboards keep working. Cleaning stops automatically after the selected time, when you press the Stop button, or when you hold Esc for two seconds. The keyboard is also released if the screen is locked, the computer suspends, or the session becomes inactive."
+msgstr "El panel táctil y los teclados externos siguen funcionando. La limpieza se detiene automáticamente al terminar el tiempo elegido, al pulsar Detener o al mantener Esc durante dos segundos. El teclado también se libera si se bloquea la pantalla, el equipo se suspende o la sesión deja de estar activa."
+
+#: data/io.github.julcal008.CleanYourLapKeyboard.metainfo.xml.in
+msgid "The application does not read, log, or transmit key presses. A small privileged helper performs only the device grab and releases it immediately when asked."
+msgstr "La aplicación no lee, registra ni transmite las pulsaciones. Un pequeño asistente privilegiado solo captura el dispositivo y lo libera inmediatamente cuando se le pide."
+
+#: data/io.github.julcal008.CleanYourLapKeyboard.metainfo.xml.in
+msgid "First public release with automatic keyboard detection, a compact GTK4 interface, and safety releases."
+msgstr "Primera versión pública con detección automática del teclado, una interfaz GTK4 compacta y liberaciones de seguridad."
