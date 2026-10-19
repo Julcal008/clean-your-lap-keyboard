@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * Public interface of the logind session monitor.
+ *
+ * Connect to the "interrupted" signal to learn when the keyboard should be
+ * released (lock, suspend, inactive session).
+ */
 #pragma once
 
 #include <glib-object.h>

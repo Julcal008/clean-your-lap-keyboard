@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * Persisted settings: the cleaning duration and the device the user picked.
+ */
 #pragma once
 
 #include <glib.h>

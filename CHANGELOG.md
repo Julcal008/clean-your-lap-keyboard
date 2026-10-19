@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-10-19
+
+### Fixed
+
+- Media and function keys (volume, microphone mute, brightness) no longer keep
+  working during cleaning. The helper now grabs the companion hotkey devices
+  (`Video Bus`, `ThinkPad Extra Buttons`, and similar) in addition to the
+  selected keyboard.
+- The power and sleep buttons are grabbed as well while cleaning, so they cannot
+  be pressed by accident. Holding the power button for several seconds still
+  forces a hardware power-off.
+
+### Added
+
+- `cylk --list-all` shows keyboards and companion hotkey devices for
+  troubleshooting.
+- The helper protocol reports its version so an outdated helper is detected.
+
 ## [0.1.0] - 2026-10-19
 
 ### Added
@@ -26,4 +44,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests for keyboard scoring and capability bitmap parsing.
 - GitHub Actions CI for Fedora, Debian, Ubuntu, and Arch Linux.
 
+[0.1.1]: https://github.com/julcal008/clean-your-lap-keyboard/releases/tag/v0.1.1
 [0.1.0]: https://github.com/julcal008/clean-your-lap-keyboard/releases/tag/v0.1.0

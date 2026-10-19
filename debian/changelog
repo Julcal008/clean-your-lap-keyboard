@@ -1,3 +1,10 @@
+clean-your-lap-keyboard (0.1.1-1) unstable; urgency=medium
+
+  * Also block media keys (volume, microphone, brightness) and the power
+    button while cleaning.
+
+ -- Julcal008 <julcalderon3008@gmail.com>  Mon, 19 Oct 2026 12:00:00 +0000
+
 clean-your-lap-keyboard (0.1.0-1) unstable; urgency=medium
 
   * Initial release.

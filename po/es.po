@@ -4,7 +4,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: clean-your-lap-keyboard 0.1.0\n"
+"Project-Id-Version: clean-your-lap-keyboard 0.1.1\n"
 "Report-Msgid-Bugs-To: https://github.com/julcal008/clean-your-lap-keyboard/issues\n"
 "POT-Creation-Date: 2026-10-19 00:00+0000\n"
 "PO-Revision-Date: 2026-10-19 00:00+0000\n"
@@ -39,6 +39,10 @@ msgstr "No se detectaron teclados."
 #: src/main.c
 msgid "List detected keyboards and exit"
 msgstr "Muestra los teclados detectados y sale"
+
+#: src/main.c
+msgid "List keyboards and companion hotkey devices and exit"
+msgstr "Muestra los teclados y los dispositivos auxiliares y sale"
 
 #: src/main.c
 msgid "Use the keyboard at PATH"
@@ -113,6 +117,10 @@ msgid "External keyboards and the touchpad stay active."
 msgstr "Los teclados externos y el panel táctil siguen activos."
 
 #: src/window.c
+msgid "Media keys and the power button are blocked too."
+msgstr "También se bloquean las teclas multimedia y el botón de encendido."
+
+#: src/window.c
 msgid "Hold Esc for 2 seconds to stop."
 msgstr "Mantén Esc durante 2 segundos para detener."
 
@@ -159,6 +167,10 @@ msgstr "Listo"
 #: src/window.c data/io.github.julcal008.CleanYourLapKeyboard.desktop.in
 msgid "Clean Your Lap Keyboard"
 msgstr "Clean Your Lap Keyboard"
+
+#: src/window.c
+msgid "The helper is outdated. Reinstall the application."
+msgstr "El helper está desactualizado. Reinstala la aplicación."
 
 #: src/window.c
 msgid "No keyboard detected"

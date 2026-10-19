@@ -1,4 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * Session monitor.
+ *
+ * Watches logind over D-Bus and emits "interrupted" when the screen is locked,
+ * the machine is about to suspend or the session stops being active.  The
+ * window uses that to release the keyboard automatically, so it is never left
+ * grabbed when the user cannot see the app anymore.
+ */
 
 #include "session.h"
 

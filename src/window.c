@@ -1,4 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * Main window and user interface.
+ *
+ * Owns the whole interaction: it lists the detected keyboards, remembers the
+ * chosen one, asks device.c which companion hotkey devices belong to it, drives
+ * the countdown and cleaning states, and tells helper.c when to grab or release.
+ * The window itself never touches /dev/input; only the privileged helper does.
+ */
 
 #include "window.h"
 
@@ -23,6 +31,7 @@ struct _CylkWindow {
 typedef struct {
   CylkConfig *config;
   GPtrArray *devices;
+  GPtrArray *companions;
   CylkDevice *selected;
   CylkHelper *helper;
   CylkSession *session;
@@ -37,6 +46,7 @@ typedef struct {
   GtkWidget *device_button;
   GtkWidget *device_name;
   GtkWidget *device_type;
+  GtkWidget *companion_note;
   GtkWidget *device_popover;
   GtkWidget *device_list;
   GtkWidget *start_button;
@@ -107,6 +117,7 @@ static void on_session_interrupted(CylkSession *session, const gchar *reason,
                                    gpointer user_data);
 
 static void update_device_card(CylkWindow *self);
+static void update_companions(CylkWindow *self);
 static void rebuild_device_list(CylkWindow *self);
 static void cancel_countdown(CylkWindow *self);
 static void reset_to_idle(CylkWindow *self);
@@ -371,6 +382,13 @@ build_idle_page(CylkWindow *self)
   gtk_box_append(GTK_BOX(notes),
                  make_icon_label("input-keyboard-symbolic",
                                  _("External keyboards and the touchpad stay active.")));
+
+  priv->companion_note =
+      make_icon_label("dialog-information-symbolic",
+                      _("Media keys and the power button are blocked too."));
+  gtk_widget_set_visible(priv->companion_note, FALSE);
+  gtk_box_append(GTK_BOX(notes), priv->companion_note);
+
   gtk_box_append(GTK_BOX(notes),
                  make_icon_label("dialog-information-symbolic",
                                  _("Hold Esc for 2 seconds to stop.")));
@@ -634,10 +652,39 @@ build_ui(CylkWindow *self)
                    G_CALLBACK(on_close_request), self);
 }
 
+/*
+ * Recompute the companion devices that must be grabbed together with the
+ * currently selected keyboard.  Called whenever the selection changes.
+ */
+static void
+update_companions(CylkWindow *self)
+{
+  CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
+  GError *error = NULL;
+
+  g_clear_pointer(&priv->companions, g_ptr_array_unref);
+
+  if (priv->selected == NULL)
+    return;
+
+  priv->companions = cylk_device_scan_companions(priv->selected, &error);
+  if (priv->companions == NULL) {
+    g_debug("companions: %s",
+            error != NULL ? error->message : "unknown error");
+    g_clear_error(&error);
+  }
+}
+
 static void
 update_device_card(CylkWindow *self)
 {
   CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
+  gboolean has_companions;
+
+  has_companions = priv->companions != NULL && priv->companions->len > 0;
+
+  if (priv->companion_note != NULL)
+    gtk_widget_set_visible(priv->companion_note, has_companions);
 
   if (priv->selected == NULL) {
     gtk_label_set_text(GTK_LABEL(priv->device_name), _("No keyboard detected"));
@@ -654,7 +701,21 @@ update_device_card(CylkWindow *self)
                      priv->selected->internal
                          ? _("Internal keyboard")
                          : _("External keyboard"));
-  gtk_widget_set_tooltip_text(priv->device_button, priv->selected->path);
+
+  if (has_companions) {
+    GString *tip = g_string_new(priv->selected->path);
+
+    for (guint i = 0; i < priv->companions->len; i++) {
+      CylkDevice *companion = g_ptr_array_index(priv->companions, i);
+      g_string_append_printf(tip, "\n• %s", companion->name);
+    }
+
+    gtk_widget_set_tooltip_text(priv->device_button, tip->str);
+    g_string_free(tip, TRUE);
+  } else {
+    gtk_widget_set_tooltip_text(priv->device_button, priv->selected->path);
+  }
+
   if (priv->start_button != NULL)
     gtk_widget_set_sensitive(priv->start_button, TRUE);
 }
@@ -676,6 +737,7 @@ on_device_row_activated(GtkListBox *list,
   priv->selected = device;
   cylk_config_set_device(priv->config, cylk_device_id(device));
   cylk_config_save(priv->config);
+  update_companions(self);
   update_device_card(self);
   gtk_popover_popdown(GTK_POPOVER(priv->device_popover));
 }
@@ -771,6 +833,7 @@ load_devices(CylkWindow *self, const gchar *override)
     show_toast(self, error->message);
     g_clear_error(&error);
     priv->selected = NULL;
+    g_clear_pointer(&priv->companions, g_ptr_array_unref);
     update_device_card(self);
     rebuild_device_list(self);
     return;
@@ -816,6 +879,7 @@ load_devices(CylkWindow *self, const gchar *override)
   if (override != NULL && !found_override)
     show_toast(self, _("The requested keyboard was not found."));
 
+  update_companions(self);
   update_device_card(self);
   rebuild_device_list(self);
 }
@@ -1018,6 +1082,7 @@ static void
 begin_grab(CylkWindow *self)
 {
   CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
+  GPtrArray *paths;
 
   if (priv->helper == NULL || priv->selected == NULL) {
     show_toast(self, _("No keyboard detected."));
@@ -1025,8 +1090,17 @@ begin_grab(CylkWindow *self)
     return;
   }
 
-  cylk_helper_grab(priv->helper, priv->selected->path,
+  paths = g_ptr_array_new();
+  if (priv->companions != NULL) {
+    for (guint i = 0; i < priv->companions->len; i++) {
+      CylkDevice *companion = g_ptr_array_index(priv->companions, i);
+      g_ptr_array_add(paths, companion->path);
+    }
+  }
+
+  cylk_helper_grab(priv->helper, priv->selected->path, paths,
                    HOLD_ESCAPE_MS, priv->duration + 5);
+  g_ptr_array_unref(paths);
 }
 
 static gboolean
@@ -1173,6 +1247,13 @@ on_helper_ready(CylkHelper *helper, gpointer user_data)
 
   if (helper != priv->helper || priv->closing || !priv->waiting_ready)
     return;
+
+  if (priv->companions != NULL && priv->companions->len > 0 &&
+      cylk_helper_protocol_version(helper) < 2) {
+    show_toast(self, _("The helper is outdated. Reinstall the application."));
+    cancel_countdown(self);
+    return;
+  }
 
   priv->waiting_ready = FALSE;
   begin_countdown(self);
@@ -1485,6 +1566,7 @@ cylk_window_dispose(GObject *object)
 
   g_clear_object(&priv->session);
   g_clear_pointer(&priv->devices, g_ptr_array_unref);
+  g_clear_pointer(&priv->companions, g_ptr_array_unref);
   g_clear_pointer(&priv->config, cylk_config_free);
   g_free(priv->demo_mode);
   g_free(priv->device_override);

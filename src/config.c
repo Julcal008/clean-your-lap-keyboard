@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * User settings persistence.
+ *
+ * Stores the chosen duration and the manually selected keyboard in
+ * $XDG_CONFIG_HOME/clean-your-lap-keyboard/settings.ini.  Loading is
+ * best-effort: a missing or unreadable file just falls back to the defaults.
+ */
 
 #include "config.h"
 

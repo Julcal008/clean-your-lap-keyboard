@@ -1,4 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * Application entry point.
+ *
+ * Parses the command line options (--list, --list-all, --device, --duration,
+ * --demo, --quit-after), sets up gettext, creates the libadwaita application
+ * and opens the main window.  This file only wires things together; the actual
+ * UI lives in window.c.
+ */
 
 #include "cylk-config.h"
 
@@ -11,6 +19,7 @@
 #include <stdlib.h>
 
 static gboolean opt_list = FALSE;
+static gboolean opt_list_all = FALSE;
 static gchar *opt_device = NULL;
 static gint opt_duration = 0;
 static gint opt_quit_after = 0;
@@ -76,10 +85,11 @@ validate_duration(const gchar *option_name,
 }
 
 static int
-list_keyboards(void)
+list_keyboards(gboolean all)
 {
   GError *error = NULL;
-  GPtrArray *devices = cylk_device_scan(&error);
+  GPtrArray *devices = all ? cylk_device_scan_all(&error)
+                           : cylk_device_scan(&error);
 
   if (devices == NULL) {
     g_printerr(_("Could not scan input devices: %s\n"),
@@ -96,9 +106,15 @@ list_keyboards(void)
 
   for (guint i = 0; i < devices->len; i++) {
     CylkDevice *device = g_ptr_array_index(devices, i);
+    const gchar *kind;
+
+    if (device->kind == CYLK_DEVICE_COMPANION)
+      kind = "companion";
+    else
+      kind = device->internal ? "internal" : "external";
 
     g_print("%s\t%s\t%s\t%d\t%s\t%s\n",
-            device->internal ? "internal" : "external",
+            kind,
             device->path,
             device->name,
             device->score,
@@ -135,8 +151,11 @@ on_handle_local_options(GApplication *app, GVariantDict *options, gpointer user_
   (void) options;
   (void) user_data;
 
+  if (opt_list_all)
+    return list_keyboards(TRUE);
+
   if (opt_list)
-    return list_keyboards();
+    return list_keyboards(FALSE);
 
   return -1;
 }
@@ -210,6 +229,8 @@ main(int argc, char *argv[])
   const GOptionEntry entries[] = {
     { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list,
       N_("List detected keyboards and exit"), NULL },
+    { "list-all", 0, 0, G_OPTION_ARG_NONE, &opt_list_all,
+      N_("List keyboards and companion hotkey devices and exit"), NULL },
     { "device", 'd', 0, G_OPTION_ARG_STRING, &opt_device,
       N_("Use the keyboard at PATH"), N_("PATH") },
     { "duration", 0, 0, G_OPTION_ARG_CALLBACK, validate_duration,

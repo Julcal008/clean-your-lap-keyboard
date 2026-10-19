@@ -1,5 +1,5 @@
 Name:           clean-your-lap-keyboard
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Temporarily disable the built-in laptop keyboard for cleaning
 
@@ -52,7 +52,7 @@ appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.julcal
 
 %files -f %{name}.lang
 %license LICENSE
-%doc README.md README.es.md CHANGELOG.md
+%doc README.md README.es.md CHANGELOG.md docs/ARCHITECTURE.md docs/ARQUITECTURA.es.md
 %{_bindir}/cylk
 %{_mandir}/man1/cylk.1*
 %dir %{_libexecdir}/clean-your-lap-keyboard
@@ -63,5 +63,9 @@ appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.julcal
 %{_datadir}/polkit-1/actions/io.github.julcal008.CleanYourLapKeyboard.policy
 
 %changelog
+* Mon Oct 19 2026 Julcal008 <julcalderon3008@gmail.com> - 0.1.1-1
+- Also block media keys (volume, microphone, brightness) and the power button
+  while cleaning.
+
 * Mon Oct 19 2026 Julcal008 <julcalderon3008@gmail.com> - 0.1.0-1
 - First release.

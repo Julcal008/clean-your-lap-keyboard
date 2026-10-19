@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * Public interface of the main window.
+ *
+ * A single CylkWindow is created at startup.  The optional arguments are only
+ * used for the CLI overrides and for the --demo preview mode.
+ */
 #pragma once
 
 #include <adwaita.h>

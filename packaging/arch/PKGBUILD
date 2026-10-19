@@ -1,5 +1,5 @@
 pkgname=clean-your-lap-keyboard
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Temporarily disable the built-in laptop keyboard for cleaning"
 arch=('x86_64' 'aarch64')

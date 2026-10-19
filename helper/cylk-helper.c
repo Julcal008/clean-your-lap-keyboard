@@ -2,11 +2,15 @@
 /*
  * cylk-helper: minimal privileged helper for Clean Your Lap Keyboard.
  *
- * It receives a single GRAB command over stdin, opens the requested evdev
- * device, takes an exclusive grab, drops privileges to the invoking user and
- * then only waits for RELEASE, EOF, the emergency Escape hold or the maximum
- * duration.  It never reads the evdev event stream and never logs key data.
+ * It receives a single GRAB command over stdin with the main keyboard device
+ * and an optional list of companion hotkey devices (volume, brightness, power
+ * button, ...).  It opens every device, takes an exclusive grab on all of
+ * them, drops privileges to the invoking user and then only waits for RELEASE,
+ * EOF, the emergency Escape hold or the maximum duration.  It never reads the
+ * evdev event stream and never logs key data.
  */
+
+#include "src/companion-keys.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -31,9 +35,18 @@
 #include <unistd.h>
 
 #define EVENT_PREFIX "/dev/input/event"
-#define MAX_LINE 512
+#define MAX_LINE 2048
+#define MAX_COMPANIONS 8
 #define KEY_WORDS (KEY_CNT / (8 * sizeof(unsigned long)) + 1)
 
+typedef struct {
+  int fd;
+  char path[PATH_MAX];
+  char name[256];
+} grab_target;
+
+static grab_target targets[MAX_COMPANIONS + 1];
+static size_t n_targets = 0;
 static volatile sig_atomic_t stop_requested = 0;
 
 static void
@@ -88,11 +101,27 @@ send_released(const char *reason)
 }
 
 static void
-release_and_exit(int fd, const char *reason)
+close_all(void)
 {
-  if (fd >= 0) {
-    ioctl(fd, EVIOCGRAB, 0);
-    close(fd);
+  for (size_t i = 0; i < n_targets; i++) {
+    if (targets[i].fd >= 0) {
+      close(targets[i].fd);
+      targets[i].fd = -1;
+    }
+  }
+}
+
+static void
+release_all(const char *reason)
+{
+  for (size_t i = n_targets; i > 0; i--) {
+    grab_target *target = &targets[i - 1];
+
+    if (target->fd >= 0) {
+      ioctl(target->fd, EVIOCGRAB, 0);
+      close(target->fd);
+      target->fd = -1;
+    }
   }
   send_released(reason);
   exit(0);
@@ -103,6 +132,16 @@ test_bit(const unsigned long *bits, unsigned int bit)
 {
   const unsigned int word_bits = 8 * sizeof(unsigned long);
   return (bits[bit / word_bits] >> (bit % word_bits)) & 1UL;
+}
+
+static bool
+has_any_bit(const unsigned long *bits, const unsigned int *keys, size_t n_keys)
+{
+  for (size_t i = 0; i < n_keys; i++) {
+    if (test_bit(bits, keys[i]))
+      return true;
+  }
+  return false;
 }
 
 static bool
@@ -126,6 +165,50 @@ is_full_keyboard(int fd)
          test_bit(keybits, KEY_ENTER) &&
          test_bit(keybits, KEY_SPACE) &&
          test_bit(keybits, KEY_LEFTSHIFT);
+}
+
+/*
+ * Decide whether an already-open fd may be grabbed as a companion device.
+ * It must be a key device, must not be a pointer and must not be a second
+ * keyboard; it must also expose at least one hotkey or button key.  This
+ * mirrors the classification done in device.c but re-checks it on the real
+ * device, because the helper must not trust the caller blindly.
+ */
+static bool
+is_companion_device(int fd)
+{
+  unsigned long evbits[(EV_MAX / (8 * sizeof(unsigned long))) + 1] = { 0 };
+  unsigned long keybits[KEY_WORDS] = { 0 };
+  unsigned long relbits[(REL_MAX / (8 * sizeof(unsigned long))) + 1] = { 0 };
+  unsigned long absbits[(ABS_MAX / (8 * sizeof(unsigned long))) + 1] = { 0 };
+
+  if (ioctl(fd, EVIOCGBIT(0, sizeof evbits), evbits) < 0)
+    return false;
+
+  if (!test_bit(evbits, EV_KEY))
+    return false;
+
+  if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keybits), keybits) < 0)
+    return false;
+
+  /* Never grab a pointer. */
+  if (ioctl(fd, EVIOCGBIT(EV_REL, sizeof relbits), relbits) >= 0) {
+    if (test_bit(relbits, REL_X) || test_bit(relbits, REL_Y))
+      return false;
+  }
+  if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof absbits), absbits) >= 0) {
+    if (test_bit(absbits, ABS_X) || test_bit(absbits, ABS_Y))
+      return false;
+  }
+
+  /* A second keyboard is not a companion device. */
+  if (is_full_keyboard(fd))
+    return false;
+
+  return has_any_bit(keybits, cylk_companion_keys,
+                     sizeof cylk_companion_keys / sizeof cylk_companion_keys[0]) ||
+         has_any_bit(keybits, cylk_button_keys,
+                     sizeof cylk_button_keys / sizeof cylk_button_keys[0]);
 }
 
 static bool
@@ -237,13 +320,70 @@ sanitize_name(char *name)
 }
 
 static int
-wait_for_release_of_keys(int fd)
+open_target(const char *path, bool primary, char *error, size_t error_size)
+{
+  char resolved[PATH_MAX];
+  char name[256] = { 0 };
+  int fd;
+
+  if (!valid_event_path(path, resolved, sizeof resolved)) {
+    snprintf(error, error_size, "Not an evdev event device: %s", path);
+    return -1;
+  }
+
+  for (size_t i = 0; i < n_targets; i++) {
+    if (strcmp(targets[i].path, resolved) == 0) {
+      snprintf(error, error_size, "Duplicate device: %s", resolved);
+      return -1;
+    }
+  }
+
+  fd = open(resolved, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+  if (fd < 0) {
+    snprintf(error, error_size, "Cannot open %s: %s", resolved, strerror(errno));
+    return -1;
+  }
+
+  if (ioctl(fd, EVIOCGNAME(sizeof name - 1), name) < 0) {
+    snprintf(error, error_size, "Cannot read device name: %s", strerror(errno));
+    close(fd);
+    return -1;
+  }
+  sanitize_name(name);
+
+  if (primary ? !is_full_keyboard(fd) : !is_companion_device(fd)) {
+    snprintf(error, error_size, "%s is not %s", name,
+             primary ? "a full keyboard" : "a supported hotkey device");
+    close(fd);
+    return -1;
+  }
+
+  targets[n_targets].fd = fd;
+  snprintf(targets[n_targets].path, sizeof targets[n_targets].path, "%s",
+           resolved);
+  snprintf(targets[n_targets].name, sizeof targets[n_targets].name, "%s", name);
+  n_targets++;
+  return 0;
+}
+
+static int
+wait_for_release_of_keys(void)
 {
   int64_t deadline = now_ms() + 2000;
 
   while (now_ms() < deadline) {
-    if (!any_key_down(fd))
+    bool down = false;
+
+    for (size_t i = 0; i < n_targets; i++) {
+      if (any_key_down(targets[i].fd)) {
+        down = true;
+        break;
+      }
+    }
+
+    if (!down)
       return 0;
+
     usleep(50000);
   }
   return -1;
@@ -253,8 +393,6 @@ int
 main(void)
 {
   char line[MAX_LINE];
-  char path[PATH_MAX] = { 0 };
-  int fd = -1;
   unsigned int hold_ms = 2000;
   unsigned int max_s = 65;
   int64_t grab_started;
@@ -268,16 +406,25 @@ main(void)
   (void) prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
   (void) prctl(PR_SET_PDEATHSIG, SIGTERM, 0, 0, 0);
 
+  for (size_t i = 0; i < sizeof targets / sizeof targets[0]; i++)
+    targets[i].fd = -1;
+
   if (getppid() == 1)
     return 1;
 
-  printf("READY\n");
+  printf("READY\t2\n");
   fflush(stdout);
 
   handshake_deadline = now_ms() + 15000;
 
   while (!grabbed) {
     struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
+    char primary[PATH_MAX];
+    char extras[MAX_COMPANIONS][PATH_MAX];
+    size_t n_extras = 0;
+    char *saveptr = NULL;
+    char *token;
+    char error[PATH_MAX + 128];
     int ret;
 
     if (stop_requested)
@@ -313,9 +460,34 @@ main(void)
       return 1;
     }
 
-    if (sscanf(line + 5, "%4095s\t%u\t%u", path, &hold_ms, &max_s) != 3) {
+    token = strtok_r(line + 5, "\t", &saveptr);
+    if (token == NULL) {
       send_error("protocol", "Malformed GRAB command");
       return 1;
+    }
+    snprintf(primary, sizeof primary, "%s", token);
+
+    token = strtok_r(NULL, "\t", &saveptr);
+    if (token == NULL || sscanf(token, "%u", &hold_ms) != 1) {
+      send_error("protocol", "Malformed GRAB command");
+      return 1;
+    }
+
+    token = strtok_r(NULL, "\t", &saveptr);
+    if (token == NULL || sscanf(token, "%u", &max_s) != 1) {
+      send_error("protocol", "Malformed GRAB command");
+      return 1;
+    }
+
+    while ((token = strtok_r(NULL, "\t", &saveptr)) != NULL) {
+      if (*token == '\0')
+        continue;
+      if (n_extras >= MAX_COMPANIONS) {
+        send_error("protocol", "Too many companion devices");
+        return 1;
+      }
+      snprintf(extras[n_extras], PATH_MAX, "%s", token);
+      n_extras++;
     }
 
     if (hold_ms < 500 || hold_ms > 5000) {
@@ -327,58 +499,56 @@ main(void)
       return 1;
     }
 
-    char resolved[PATH_MAX];
-    if (!valid_event_path(path, resolved, sizeof resolved)) {
-      send_error("invalid-path", "Not an evdev event device: %s", path);
-      return 1;
-    }
-    snprintf(path, sizeof path, "%s", resolved);
+    n_targets = 0;
 
-    fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-    if (fd < 0) {
-      send_error("open", "Cannot open %s: %s", path, strerror(errno));
+    if (open_target(primary, true, error, sizeof error) != 0) {
+      send_error("not-keyboard", "%s", error);
+      close_all();
       return 1;
     }
 
-    char name[256] = { 0 };
-    if (ioctl(fd, EVIOCGNAME(sizeof name - 1), name) < 0) {
-      send_error("name", "Cannot read device name: %s", strerror(errno));
-      close(fd);
-      return 1;
-    }
-    sanitize_name(name);
-
-    if (!is_full_keyboard(fd)) {
-      send_error("not-keyboard", "%s is not a full keyboard", name);
-      close(fd);
-      return 1;
+    for (size_t i = 0; i < n_extras; i++) {
+      if (open_target(extras[i], false, error, sizeof error) != 0) {
+        send_error("device", "%s", error);
+        close_all();
+        return 1;
+      }
     }
 
-    if (wait_for_release_of_keys(fd) != 0) {
+    if (wait_for_release_of_keys() != 0) {
       send_error("keys-down", "Release all keys and try again");
-      close(fd);
+      close_all();
       return 1;
     }
 
-    if (ioctl(fd, EVIOCGRAB, 1) < 0) {
-      send_error("grab", "Cannot grab %s: %s%s", name, strerror(errno),
-                 errno == EBUSY ? " (already grabbed by another application)" : "");
-      close(fd);
-      return 1;
+    for (size_t i = 0; i < n_targets; i++) {
+      if (ioctl(targets[i].fd, EVIOCGRAB, 1) < 0) {
+        for (size_t j = 0; j < i; j++)
+          ioctl(targets[j].fd, EVIOCGRAB, 0);
+
+        send_error("grab", "Cannot grab %s: %s%s", targets[i].name,
+                   strerror(errno),
+                   errno == EBUSY
+                       ? " (already grabbed by another application)"
+                       : "");
+        close_all();
+        return 1;
+      }
     }
 
     grabbed = true;
 
     if (!drop_privileges()) {
-      ioctl(fd, EVIOCGRAB, 0);
-      close(fd);
+      for (size_t i = 0; i < n_targets; i++)
+        ioctl(targets[i].fd, EVIOCGRAB, 0);
+      close_all();
       send_error("privileges", "Could not drop privileges");
       return 1;
     }
 
     (void) prctl(PR_SET_PDEATHSIG, SIGTERM, 0, 0, 0);
 
-    printf("OK\t%s\n", name);
+    printf("OK\t%s\n", targets[0].name);
     fflush(stdout);
     grab_started = now_ms();
   }
@@ -393,31 +563,31 @@ main(void)
     int ret;
 
     if (stop_requested)
-      release_and_exit(fd, "signal");
+      release_all("signal");
 
     ret = poll(&pfd, 1, 50);
     if (ret < 0) {
       if (errno != EINTR)
-        release_and_exit(fd, "poll-error");
+        release_all("poll-error");
     } else if (ret > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR))) {
       if (fgets(line, sizeof line, stdin) == NULL)
-        release_and_exit(fd, "disconnected");
+        release_all("disconnected");
 
       line[strcspn(line, "\r\n")] = '\0';
       if (strcmp(line, "RELEASE") == 0 || strcmp(line, "QUIT") == 0)
-        release_and_exit(fd, "user");
+        release_all("user");
     }
 
-    if (escape_down(fd)) {
+    if (escape_down(targets[0].fd)) {
       if (escape_since == 0)
         escape_since = now_ms();
       else if (now_ms() - escape_since >= (int64_t) hold_ms)
-        release_and_exit(fd, "escape");
+        release_all("escape");
     } else {
       escape_since = 0;
     }
 
     if (now_ms() - grab_started >= (int64_t) max_s * 1000)
-      release_and_exit(fd, "timeout");
+      release_all("timeout");
   }
 }

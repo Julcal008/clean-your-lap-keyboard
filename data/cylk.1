@@ -1,4 +1,4 @@
-.TH CYLK 1 "2026-10-19" "cylk 0.1.0" "User Commands"
+.TH CYLK 1 "2026-10-19" "cylk 0.1.1" "User Commands"
 .SH NAME
 cylk \- temporarily disable the built-in laptop keyboard for cleaning
 .SH SYNOPSIS
@@ -7,8 +7,9 @@ cylk \- temporarily disable the built-in laptop keyboard for cleaning
 .SH DESCRIPTION
 .B cylk
 grabs the internal evdev keyboard of a laptop so that the keys can be cleaned
-while the computer is running. The touchpad and external keyboards keep
-working.
+while the computer is running. It also grabs the auxiliary hotkey devices that
+carry volume, microphone, brightness, and power button events. The touchpad and
+external keyboards keep working.
 .PP
 The keyboard is released automatically when the selected duration ends, when
 the Stop button is pressed, when Esc is held for two seconds, when the window
@@ -25,6 +26,11 @@ seconds and can be set to 30, 60, or 120 seconds.
 Print the detected keyboards and exit. Each line contains the classification
 (internal or external), evdev path, device name, detection score, bus, and
 hardware path.
+.TP
+.B \-\-list\-all
+Print the detected keyboards and the companion hotkey devices (media keys,
+brightness, power button) and exit. Useful to diagnose keys that still work
+during cleaning.
 .TP
 .BR \-d " " \fIPATH\fR ", " \-\-device= \fIPATH\fR
 Use the evdev device at
@@ -50,11 +56,13 @@ option is intended for testing and screenshots.
 .BR \-h ", " \-\-help
 Show a summary of the options.
 .SH SAFETY
-The privileged helper checks that the requested path is a char device in
-/dev/input with a full keyboard capability bitmap. It waits for all keys to be
-released, takes an exclusive
+The privileged helper checks that the main path is a char device in
+/dev/input with a full keyboard capability bitmap, and that every companion
+path is a hotkey device that is not a pointer, not a second keyboard, and
+belongs to the same hardware as the selected keyboard. It waits for all keys to
+be released, takes an exclusive
 .B EVIOCGRAB
-grab, drops privileges to the invoking user, sets
+grab on every device, drops privileges to the invoking user, sets
 .BR PR_SET_NO_NEW_PRIVS ,
 and clears the dumpable flag.
 .PP

@@ -1,4 +1,21 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * Client side of the privileged helper.
+ *
+ * Spawns `pkexec cylk-helper`, talks to it over stdin/stdout using a very small
+ * line protocol and turns its replies into GObject signals (ready, grabbed,
+ * released, error, exited).  The UI only reacts to those signals; it never
+ * opens an input device itself.
+ *
+ * Protocol (fields are separated by TAB):
+ *   UI -> helper : GRAB <path> <hold_ms> <max_seconds> [<companion> ...]
+ *   UI -> helper : RELEASE
+ *   UI -> helper : QUIT
+ *   helper -> UI : READY <protocol-version>
+ *   helper -> UI : OK <device-name>
+ *   helper -> UI : RELEASED <reason>
+ *   helper -> UI : ERR <code> <message>
+ */
 
 #include "helper.h"
 
@@ -27,6 +44,7 @@ typedef struct {
   gboolean released;
   gboolean errored;
   gboolean stopping;
+  guint protocol_version;
 } CylkHelperPrivate;
 
 enum {
@@ -63,13 +81,20 @@ emit_error(CylkHelper *self, const gchar *message)
   g_signal_emit(self, signals[SIGNAL_ERROR], 0, message);
 }
 
+/*
+ * Parse one protocol line from the helper and emit the matching signal.
+ * Unknown lines are ignored (only logged in debug builds).
+ */
 static void
 handle_line(CylkHelper *self, const gchar *line)
 {
   CylkHelperPrivate *priv = cylk_helper_get_instance_private(self);
 
-  if (g_strcmp0(line, "READY") == 0) {
+  if (g_strcmp0(line, "READY") == 0 || g_str_has_prefix(line, "READY\t")) {
     priv->ready = TRUE;
+    priv->protocol_version = 1;
+    if (g_str_has_prefix(line, "READY\t"))
+      priv->protocol_version = (guint) g_ascii_strtoull(line + 6, NULL, 10);
     g_signal_emit(self, signals[SIGNAL_READY], 0);
     return;
   }
@@ -317,6 +342,7 @@ cylk_helper_start(CylkHelper *self, GError **error)
 
   priv->running = TRUE;
   priv->ready = FALSE;
+  priv->protocol_version = 0;
   priv->grabbed = FALSE;
   priv->released = FALSE;
   priv->errored = FALSE;
@@ -346,12 +372,13 @@ cylk_helper_start(CylkHelper *self, GError **error)
 void
 cylk_helper_grab(CylkHelper *self,
                  const gchar *device_path,
+                 GPtrArray *companion_paths,
                  guint hold_ms,
                  guint max_seconds)
 {
   CylkHelperPrivate *priv = cylk_helper_get_instance_private(self);
   GError *error = NULL;
-  gchar *command;
+  GString *command;
 
   g_return_if_fail(CYLK_IS_HELPER(self));
   g_return_if_fail(device_path != NULL);
@@ -366,13 +393,39 @@ cylk_helper_grab(CylkHelper *self,
     return;
   }
 
-  command = g_strdup_printf("GRAB\t%s\t%u\t%u\n",
-                            device_path, hold_ms, max_seconds);
-  if (!write_command(self, command, &error)) {
-    emit_error(self, error != NULL ? error->message : "Could not send the GRAB command.");
+  command = g_string_new("GRAB\t");
+  g_string_append(command, device_path);
+  g_string_append_printf(command, "\t%u\t%u", hold_ms, max_seconds);
+
+  if (companion_paths != NULL) {
+    for (guint i = 0; i < companion_paths->len; i++) {
+      const gchar *path = g_ptr_array_index(companion_paths, i);
+      if (path == NULL || *path == '\0')
+        continue;
+      g_string_append_c(command, '\t');
+      g_string_append(command, path);
+    }
+  }
+
+  g_string_append_c(command, '\n');
+
+  if (!write_command(self, command->str, &error)) {
+    emit_error(self,
+               error != NULL ? error->message
+                             : "Could not send the GRAB command.");
     g_clear_error(&error);
   }
-  g_free(command);
+  g_string_free(command, TRUE);
+}
+
+guint
+cylk_helper_protocol_version(CylkHelper *self)
+{
+  CylkHelperPrivate *priv;
+
+  g_return_val_if_fail(CYLK_IS_HELPER(self), 0);
+  priv = cylk_helper_get_instance_private(self);
+  return priv->protocol_version;
 }
 
 void

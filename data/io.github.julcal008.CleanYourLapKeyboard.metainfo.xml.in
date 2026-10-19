@@ -13,7 +13,7 @@
   <url type="bugtracker">https://github.com/julcal008/clean-your-lap-keyboard/issues</url>
   <description>
     <p>Clean Your Lap Keyboard temporarily grabs the internal keyboard of a laptop so the keys can be wiped without typing anything.</p>
-    <p>The touchpad and external keyboards keep working. Cleaning stops automatically after the selected time, when you press the Stop button, or when you hold Esc for two seconds. The keyboard is also released if the screen is locked, the computer suspends, or the session becomes inactive.</p>
+    <p>The application also grabs the auxiliary hotkey devices that report volume, microphone, brightness, and power button events, so those keys cannot be pressed by accident either. The touchpad and external keyboards keep working. Cleaning stops automatically after the selected time, when you press the Stop button, or when you hold Esc for two seconds. The keyboard is also released if the screen is locked, the computer suspends, or the session becomes inactive.</p>
     <p>The application does not read, log, or transmit key presses. A small privileged helper performs only the device grab and releases it immediately when asked.</p>
   </description>
   <categories>
@@ -29,6 +29,11 @@
     <binary>cylk</binary>
   </provides>
   <releases>
+    <release version="0.1.1" date="2026-10-19">
+      <description>
+        <p>Also block media keys (volume, microphone, brightness) and the power button while cleaning.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-10-19">
       <description>
         <p>First public release with automatic keyboard detection, a compact GTK4 interface, and safety releases.</p>
