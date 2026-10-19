@@ -20,7 +20,9 @@ virtual reciban las pulsaciones.
 
 ## Características
 
-- Captura exclusiva y temporal solo del teclado interno.
+- Captura exclusiva y temporal del teclado interno.
+- Captura también los dispositivos auxiliares que emiten volumen, micrófono,
+  brillo y los botones de encendido y suspensión.
 - Detección automática del teclado interno y selector manual.
 - Ventana compacta de 400 × 580 con GTK4/libadwaita, tema claro/oscuro e idioma
   del sistema.
@@ -40,10 +42,12 @@ virtual reciban las pulsaciones.
 
 ## Lo que no hace
 
-- No desactiva el panel táctil, un teclado externo USB/Bluetooth ni el botón de
-  encendido.
-- No lee, guarda ni transmite las pulsaciones. El helper solo captura el
-  dispositivo y consulta el estado de las teclas para detectar Esc mantenido.
+- No desactiva el panel táctil ni un teclado externo USB/Bluetooth. Un teclado
+  externo solo se ve afectado si lo seleccionas para limpiar.
+- No puede bloquear teclas que el firmware o el controlador embebido gestiona
+  por completo en hardware sin emitir eventos evdev.
+- No lee, guarda ni transmite las pulsaciones. El helper solo captura los
+  dispositivos y consulta el estado de las teclas para detectar Esc mantenido.
 - No sustituye al bloqueo de pantalla. Bloquea la sesión antes de limpiar si
   hay otras personas con acceso físico al portátil.
 - En Wayland no puede colocar la ventana en coordenadas absolutas; la posición
@@ -74,13 +78,13 @@ Construye el RPM desde este repositorio (ver [Empaquetado](#empaquetado)) o
 instala un RPM de una versión publicada:
 
 ```bash
-sudo dnf install ./clean-your-lap-keyboard-0.1.0-1.fc44.x86_64.rpm
+sudo dnf install ./clean-your-lap-keyboard-0.1.1-1.fc44.x86_64.rpm
 ```
 
 ### Debian y Ubuntu
 
 ```bash
-sudo apt install ./clean-your-lap-keyboard_0.1.0-1_amd64.deb
+sudo apt install ./clean-your-lap-keyboard_0.1.1-1_amd64.deb
 ```
 
 ### Arch Linux
@@ -159,6 +163,7 @@ Los binarios compilados también se pueden ejecutar directamente:
 cylk [OPCIÓN…]
 
   -l, --list                 Muestra los teclados detectados y sale
+      --list-all             Muestra teclados y dispositivos auxiliares
   -d, --device=RUTA          Usa el teclado en RUTA
       --duration=SEGUNDOS    Duración: 30, 60 o 120 segundos
       --demo=ESTADO          Previsualiza idle, countdown, cleaning o done
@@ -184,6 +189,20 @@ dispositivo, el nombre, la puntuación, el bus y la ruta de hardware. La
 aplicación recuerda el teclado elegido manualmente en
 `~/.config/clean-your-lap-keyboard/settings.ini`.
 
+Para ver los dispositivos auxiliares que se capturan junto al teclado
+(volumen, brillo, botones de encendido), usa:
+
+```bash
+cylk --list-all
+```
+
+```text
+internal	/dev/input/event4	AT Translated Set 2 keyboard	460	i8042	platform-i8042-serio-0
+companion	/dev/input/event10	Video Bus	0	-	pci-0000:00:08.1
+companion	/dev/input/event13	ThinkPad Extra Buttons	0	-	platform-thinkpad_acpi
+external	/dev/input/event21	MOSART Semi. 2.4G Keyboard Mouse	-60	usb	pci-0000:07:00.4-usb-0:2:1.0
+```
+
 Si la elección automática no es correcta, selecciona el teclado en la tarjeta de
 la aplicación o iníciala con una ruta explícita:
 
@@ -206,8 +225,10 @@ El flujo normal es:
 
 1. El usuario pulsa **Empezar limpieza**.
 2. La aplicación inicia `pkexec` y pide permiso a polkit.
-3. El helper abre el dispositivo evdev, comprueba que parece un teclado completo,
-   espera a que se suelten todas las teclas y aplica `EVIOCGRAB`.
+3. El helper abre el dispositivo evdev junto con los dispositivos auxiliares
+   (volumen, micrófono, brillo, botones de encendido y suspensión), comprueba
+   cada uno, espera a que se suelten todas las teclas y aplica `EVIOCGRAB` en
+   todos ellos.
 4. El helper baja privilegios al usuario que invocó `pkexec`, activa
    `PR_SET_NO_NEW_PRIVS` y `PR_SET_DUMPABLE=0`, y confirma el éxito.
 5. La interfaz muestra la cuenta atrás y después la pantalla de limpieza.
@@ -220,8 +241,11 @@ El flujo normal es:
    - se cierra la entrada estándar del helper o muere la aplicación;
    - logind informa de bloqueo de pantalla, suspensión o sesión inactiva.
 
-Cerrar el descriptor del helper basta para que el kernel elimine el
+Cerrar los descriptores del helper basta para que el kernel elimine el
 `EVIOCGRAB`, así que el teclado se recupera incluso si la interfaz falla.
+Mantener pulsado el botón de encendido durante varios segundos sigue forzando
+un apagado por hardware a nivel de firmware, así que el equipo siempre se puede
+apagar.
 
 El helper **no** lee el flujo de eventos evdev. Solo usa `EVIOCGKEY` para
 comprobar si hay teclas pulsadas, incluido el gesto de mantener Esc.
@@ -243,8 +267,10 @@ política en `/usr/share/polkit-1/actions/` o añade una regla local en
 `/etc/polkit-1/rules.d/`.
 
 El helper valida que la ruta sea un dispositivo evdev real, con los números
-major/minor esperados y un mapa de capacidades de teclado completo. Rechaza
-archivos arbitrarios y dispositivos que no sean teclados.
+major/minor esperados y un mapa de capacidades de teclado completo. Cada ruta
+auxiliar debe exponer teclas multimedia o de botón, no puede ser un puntero ni
+un segundo teclado y debe pertenecer al mismo hardware que el teclado elegido.
+Rechaza archivos arbitrarios y dispositivos no soportados.
 
 ## Solución de problemas
 
@@ -271,6 +297,26 @@ En gestores de ventanas mínimos, inicia uno como
 Otro programa mantiene `EVIOCGRAB` sobre el dispositivo. Cierra máquinas
 virtuales, herramientas de escritorio remoto u otro software de reasignación de
 teclado e inténtalo de nuevo.
+
+### Las teclas de volumen, brillo o micrófono siguen funcionando al limpiar
+
+Esas teclas suelen las reporta un dispositivo evdev distinto del teclado
+principal, así que la aplicación también lo captura. Para ver qué dispositivos
+se usan:
+
+```bash
+cylk --list-all
+```
+
+Si alguna tecla sigue funcionando, comprueba qué dispositivo la emite:
+
+```bash
+sudo evtest
+```
+
+Las teclas que gestiona el firmware por completo no se pueden bloquear desde el
+espacio de usuario. Las teclas de un teclado externo se dejan funcionando a
+propósito salvo que hayas seleccionado ese teclado para limpiar.
 
 ### Posición de la ventana en Wayland
 
@@ -305,7 +351,8 @@ Como último recurso, cambia a una terminal virtual o reinicia.
 ```text
 src/main.c            CLI, arranque de la aplicación y carga del CSS
 src/window.c          Interfaz GTK4/libadwaita y máquina de estados
-src/device.c          Detección y puntuación de teclados con udev/sysfs
+src/device.c          Detección, puntuación y dispositivos auxiliares
+src/companion-keys.h  Lista compartida de teclas multimedia y de botón
 src/config.c          Duración y elección manual persistidas
 src/helper.c          Proceso pkexec y protocolo de líneas
 src/session.c         Monitor de bloqueo, suspensión y sesión con logind
@@ -315,16 +362,22 @@ helper/cylk-helper.c  Helper privilegiado de captura y liberación
 El protocolo del helper usa líneas:
 
 ```text
-UI -> helper:  GRAB\t<ruta>\t<hold_ms>\t<max_segundos>
+UI -> helper:  GRAB\t<ruta>\t<hold_ms>\t<max_segundos>[\t<auxiliar>…]
 UI -> helper:  RELEASE
 UI -> helper:  QUIT
-helper -> UI:  READY
+helper -> UI:  READY\t2
 helper -> UI:  OK\t<nombre del dispositivo>
 helper -> UI:  RELEASED\t<motivo>
 helper -> UI:  ERR\t<código>\t<mensaje>
 ```
 
 Así el código privilegiado es pequeño y fácil de auditar.
+
+Para ver el recorrido completo (modelo de dispositivos, detección de auxiliares,
+ciclo de la captura y cómo añadir una tecla bloqueada), lee
+[docs/ARQUITECTURA.es.md](docs/ARQUITECTURA.es.md) (también en inglés:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)). Consulta
+[CONTRIBUTING.md](CONTRIBUTING.md) para compilar, empaquetar y depurar.
 
 ## Empaquetado
 
@@ -339,8 +392,8 @@ RPM de Fedora:
 ```bash
 mkdir -p ~/rpmbuild/SOURCES
 git archive --format=tar.gz \
-  --prefix=clean-your-lap-keyboard-0.1.0/ \
-  -o ~/rpmbuild/SOURCES/clean-your-lap-keyboard-0.1.0.tar.gz HEAD
+  --prefix=clean-your-lap-keyboard-0.1.1/ \
+  -o ~/rpmbuild/SOURCES/clean-your-lap-keyboard-0.1.1.tar.gz HEAD
 rpmbuild -ba packaging/fedora/clean-your-lap-keyboard.spec
 ```
 

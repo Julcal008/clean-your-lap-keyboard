@@ -86,6 +86,22 @@ jobs:
     needs: [fedora-rpm, debian-deb, arch-package]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Extract release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { inside=1; next }
+            inside && /^## \[/ { exit }
+            inside { print }
+          ' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "Release ${version}." > release_notes.md
+          fi
+          {
+            echo ""
+            echo "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md) for the full history."
+          } >> release_notes.md
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -93,4 +109,4 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
-          generate_release_notes: true
+          body_path: release_notes.md

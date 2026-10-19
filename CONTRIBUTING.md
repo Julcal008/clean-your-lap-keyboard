@@ -33,6 +33,66 @@ The UI can be previewed without touching any input device:
 Real grab tests require root or `pkexec`, and should always include an automatic
 release. Never leave a keyboard grabbed while editing or debugging.
 
+## Repository layout
+
+```text
+src/                  Application and shared logic
+  main.c              CLI options and startup
+  window.c            GTK4/libadwaita UI and state machine
+  device.c/.h         Keyboard and companion discovery
+  companion-keys.h    The list of blocked key codes
+  config.c/.h         Persisted settings
+  helper.c/.h         Helper client (line protocol)
+  session.c/.h        logind monitor
+helper/cylk-helper.c  Privileged grab/release helper
+tests/                Unit tests (run with meson test)
+data/                 Desktop file, icon, man page, metainfo, polkit policy
+docs/                 Architecture notes (English and Spanish)
+po/                   Translations
+packaging/            RPM, DEB and Arch packaging files
+```
+
+See `docs/ARCHITECTURE.md` for the full design and data flow.
+
+## Adding a blocked key
+
+The keys that must not work while cleaning are listed in one place,
+`src/companion-keys.h`:
+
+- `CYLK_COMPANION_KEY_LIST` for media and hotkey codes (volume, mute,
+  brightness, radio switches, ...);
+- `CYLK_BUTTON_KEY_LIST` for physical buttons (power, sleep, suspend).
+
+Add the `KEY_*` macro to the right list, add a test in `tests/test-device.c` if
+needed, and run `meson test`. Both the UI and the helper include the same header,
+so the key is recognized on both sides.
+
+## Diagnosing devices
+
+```bash
+cylk --list           # selectable keyboards
+cylk --list-all       # keyboards plus companion hotkey devices
+sudo evtest           # which device emits a given key
+```
+
+If a key still works during cleaning, find the event device that emits it with
+`evtest` and check whether the companion detection should consider it. Report
+the output of `cylk --list-all` and `evtest` (never include passwords).
+
+## Packaging and releasing
+
+The packages are built by GitHub Actions when a tag is pushed:
+
+```bash
+git tag -a v0.1.1 -m "Clean Your Lap Keyboard 0.1.1"
+git push origin v0.1.1
+```
+
+The `Release` workflow builds the Fedora RPM, the Debian package and the Arch
+package and publishes them in a GitHub Release. Remember to bump the version in
+`meson.build`, `CHANGELOG.md`, `debian/changelog`, `packaging/` and the metainfo
+before tagging.
+
 ## Pull requests
 
 - Keep the privileged helper small and auditable.
