@@ -7,5 +7,5 @@ Exec=cylk
 Icon=io.github.julcal008.CleanYourLapKeyboard
 Terminal=false
 Categories=Utility;
-Keywords=keyboard;clean;cleaning;laptop;disable;lock;
+Keywords=keyboard;clean;cleaning;laptop;disable;lock;touchpad;
 StartupNotify=true

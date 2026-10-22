@@ -59,6 +59,8 @@ nunca lee (ni registra) eventos: solo captura y espera.
 - un **auxiliar** (`CYLK_DEVICE_COMPANION`): un nodo que emite teclas multimedia
   (volumen, silencio, brillo, radios) o botones físicos (encendido, suspensión).
   Se capturan junto con el teclado.
+- un **trackpad** (`CYLK_DEVICE_TOUCHPAD`): un puntero interno que el usuario
+  puede desactivar opcionalmente junto con el teclado.
 
 ### Cómo se reconoce un teclado
 
@@ -92,6 +94,22 @@ con el teclado elegido (`cylk_device_is_companion_candidate()`):
 Un puntero, un segundo teclado o un dispositivo sin teclas multimedia/de botón
 nunca se elige como auxiliar.
 
+### Cómo se encuentra el trackpad
+
+`cylk_device_scan_touchpads()` conserva los nodos aceptados por
+`cylk_device_is_touchpad_candidate()`:
+
+- deben tener ejes de puntero (`REL_X/Y` o `ABS_X/Y`) y capacidades táctiles
+  (`BTN_TOUCH`, `BTN_TOOL_FINGER`, ejes multitouch);
+- el nombre debe parecer un trackpad (`Touchpad`, `Trackpad`, `ClickPad`,
+  `GlidePoint`, ...) y no debe decir ratón ni pantalla táctil;
+- `cylk_touchpad_score()` debe alcanzar el umbral interno: los nombres y las
+  rutas i8042/serio/I2C suman, USB y Bluetooth restan. Un portátil que conecta el
+  trackpad por USB se acepta si comparte la interfaz física del teclado elegido.
+
+El trackpad solo se captura cuando el usuario marca la casilla, y la elección se
+guarda como `touchpad=true` en el archivo de ajustes.
+
 ### Por qué se incluye el botón de encendido
 
 El botón de encendido vive en su propio dispositivo ACPI (`event0`, `event3`,
@@ -102,13 +120,19 @@ el controlador embebido, sin depender del sistema operativo.
 
 ## La captura
 
-Cuando el usuario pulsa **Empezar limpieza**:
+Cuando el usuario pulsa **Empezar limpieza**, la interfaz inicia el helper.
+Cuando el helper imprime `READY`, la interfaz ejecuta la cuenta atrás de tres
+segundos. Al terminar:
 
-1. `src/window.c` pide a `cylk_device_scan_companions()` las rutas extra.
-2. Envía `GRAB <ruta> <hold_ms> <max_segundos> <auxiliar> ...` al helper.
+1. `src/window.c` usa las rutas auxiliares y del trackpad calculadas al
+   seleccionar el teclado.
+2. Envía `GRAB <ruta> <hold_ms> <max_segundos> <auxiliar> ... T:<trackpad> ...`
+   al helper.
 3. `helper/cylk-helper.c` abre cada ruta, valida cada una con
-   `is_full_keyboard()` / `is_companion_device()`, espera a que se suelten todas
-   las teclas y aplica `EVIOCGRAB` en todas.
+   `is_full_keyboard()`, `is_companion_device()` o `is_touchpad_device()`, espera
+   hasta dos segundos a que se suelten todas las teclas y aplica `EVIOCGRAB` en
+   todas. El trackpad se excluye de la espera de teclas porque un dedo apoyado
+   no es una tecla pulsada.
 4. Después baja de root, activa `PR_SET_NO_NEW_PRIVS` y limpia el flag de volcado.
 5. Informa `OK` y entra en un bucle mínimo que solo espera `RELEASE`, EOF, una
    **Esc** mantenida o la duración máxima.
@@ -125,12 +149,16 @@ El teclado se libera cuando ocurre cualquiera de estas cosas:
 Cerrar los descriptores basta para que el kernel elimine la captura, así que un
 fallo de la interfaz nunca deja el teclado desactivado.
 
+Cuando también se captura el trackpad, el botón **Detener** no se puede pulsar
+porque el puntero está desactivado. La liberación de emergencia con Esc, el
+temporizador y el límite máximo del helper siguen liberando todo.
+
 ## Protocolo del helper
 
 Líneas separadas por tabuladores por stdin/stdout:
 
 ```text
-UI -> helper : GRAB <ruta> <hold_ms> <max_segundos> [<auxiliar> ...]
+UI -> helper : GRAB <ruta> <hold_ms> <max_segundos> [<auxiliar> ...] [T:<trackpad> ...]
 UI -> helper : RELEASE
 UI -> helper : QUIT
 helper -> UI : READY <versión-de-protocolo>
@@ -139,9 +167,9 @@ helper -> UI : RELEASED <motivo>
 helper -> UI : ERR <código> <mensaje>
 ```
 
-`READY 2` es la versión actual. La versión permite que la interfaz detecte un
+`READY 3` es la versión actual. La versión permite que la interfaz detecte un
 helper antiguo instalado junto a una aplicación nueva y se niegue a continuar en
-lugar de capturar solo el teclado principal sin avisar.
+lugar de capturar solo el teclado principal o ignorar el trackpad sin avisar.
 
 ## Añadir una tecla bloqueada
 
@@ -160,5 +188,8 @@ mismo encabezado, la tecla queda reconocida en ambos lados.
   limpieza**. Vuelven en cuanto se libera la captura.
 - Las teclas que el firmware gestiona por completo en hardware (sin emitir
   ningún evento evdev) no se pueden bloquear desde el espacio de usuario.
+- La detección del trackpad es heurística y se limita a propósito a trackpads
+  integrados. Al desactivarlo también se desactiva el puntero, así que el botón
+  Detener no se puede pulsar; usa Esc mantenido o deja que termine el temporizador.
 - La detección automática es heurística; el selector manual y `cylk --list-all`
   existen para los casos en que se equivoca.

@@ -2,7 +2,8 @@
 
 A tiny Linux app that temporarily disables the **built-in keyboard** of a
 laptop, so you can wipe the keys while the computer is still on. Your touchpad
-and any external keyboard keep working.
+and any external keyboard keep working by default, and you can optionally
+disable the touchpad too from a checkbox in the window.
 
 [Español](README.es.md)
 
@@ -24,6 +25,8 @@ receiving the key events.
 - Temporary, exclusive grab of the internal keyboard.
 - Also grabs the companion hotkey devices that carry volume, microphone,
   brightness, and power/sleep button events.
+- Optional: disable the built-in touchpad as well with a small checkbox, so it
+  does not move the pointer while you clean. The choice is remembered.
 - Automatic detection of the internal keyboard, with a manual selector.
 - Compact 400 × 580 GTK4/libadwaita window that follows the system light/dark
   theme and the system language.
@@ -42,8 +45,11 @@ receiving the key events.
 
 ## What it does not do
 
-- It does not disable the touchpad or an external USB/Bluetooth keyboard. An
-  external keyboard is only affected if you select it for cleaning.
+- It does not disable the touchpad unless you tick the optional checkbox, and it
+  never disables an external USB/Bluetooth keyboard. An external keyboard is
+  only affected if you select it for cleaning.
+- The touchpad option only targets built-in touchpads. Mice, external trackpads
+  and touchscreens are rejected by the detection heuristic.
 - It cannot block keys that the firmware or embedded controller handles
   entirely in hardware without emitting any evdev event.
 - It does not read, record, or transmit key presses. The helper only grabs the
@@ -61,7 +67,7 @@ receiving the key events.
 - `pkexec` and a working polkit authentication agent.
 - A desktop session on Wayland or X11.
 
-Tested target distributions:
+Build-tested target distributions (CI):
 
 | Distribution | Notes |
 | --- | --- |
@@ -69,6 +75,10 @@ Tested target distributions:
 | Ubuntu 24.04+ | GTK 4.8 / libadwaita 1.2 are available. |
 | Debian 12+ | Bookworm has the required library versions. |
 | Arch Linux | Rolling packages are sufficient. |
+
+Runtime testing has only been confirmed on a ThinkPad running Fedora 44. The
+other distributions are built and unit-tested in CI, but their runtime
+behavior has not been confirmed.
 
 ## Install
 
@@ -78,13 +88,13 @@ Build the RPM from this repository (see [Packaging](#packaging)), or install a
 release RPM:
 
 ```bash
-sudo dnf install ./clean-your-lap-keyboard-0.1.1-1.fc44.x86_64.rpm
+sudo dnf install ./clean-your-lap-keyboard-0.1.2-1.fc44.x86_64.rpm
 ```
 
 ### Debian and Ubuntu
 
 ```bash
-sudo apt install ./clean-your-lap-keyboard_0.1.1-1_amd64.deb
+sudo apt install ./clean-your-lap-keyboard_0.1.2-1_amd64.deb
 ```
 
 ### Arch Linux
@@ -163,7 +173,7 @@ The compiled binaries are also directly runnable from the build tree:
 cylk [OPTION…]
 
   -l, --list                 List detected keyboards and exit
-      --list-all             List keyboards and companion hotkey devices
+      --list-all             List keyboards, touchpads and companion devices
   -d, --device=PATH          Use the keyboard at PATH
       --duration=SECONDS     Cleaning duration: 30, 60 or 120 seconds
       --demo=STATE           Preview idle, countdown, cleaning or done
@@ -188,8 +198,8 @@ The first field is the heuristic classification, followed by the device path,
 name, score, bus, and hardware path. The app remembers a manually selected
 keyboard in `~/.config/clean-your-lap-keyboard/settings.ini`.
 
-To see the companion hotkey devices that are grabbed together with the
-keyboard, use:
+To see the internal touchpad and the companion hotkey devices that can be
+grabbed together with the keyboard, use:
 
 ```bash
 cylk --list-all
@@ -197,6 +207,7 @@ cylk --list-all
 
 ```text
 internal	/dev/input/event4	AT Translated Set 2 keyboard	460	i8042	platform-i8042-serio-0
+touchpad	/dev/input/event8	SynPS/2 Synaptics TouchPad	260	i8042	platform-i8042-serio-1
 companion	/dev/input/event10	Video Bus	0	-	pci-0000:00:08.1
 companion	/dev/input/event13	ThinkPad Extra Buttons	0	-	platform-thinkpad_acpi
 external	/dev/input/event21	MOSART Semi. 2.4G Keyboard Mouse	-60	usb	pci-0000:07:00.4-usb-0:2:1.0
@@ -223,14 +234,18 @@ cylk --demo=done
 The normal flow is:
 
 1. The user presses **Start cleaning**.
-2. The app starts `pkexec` and asks polkit for permission.
-3. The helper opens the requested evdev device plus the companion hotkey
-   devices (volume, microphone, brightness, power/sleep buttons), checks each
-   one, waits for all keys to be released, and takes `EVIOCGRAB` on all of them.
-4. The helper drops privileges to the user who invoked `pkexec`, sets
+2. The app starts `pkexec` and waits for the helper to print `READY`. Until
+   then, the countdown page shows “Waiting for permission…”.
+3. The app runs the three-second countdown.
+4. When the countdown ends, the app sends `GRAB`. The helper opens the
+   requested evdev device, the companion hotkey devices (volume, microphone,
+   brightness, power/sleep buttons) and, if the checkbox was ticked, the
+   internal touchpad. It checks each one, waits up to two seconds for all keys
+   to be released, and takes `EVIOCGRAB` on all of them.
+5. The helper drops privileges to the user who invoked `pkexec`, sets
    `PR_SET_NO_NEW_PRIVS` and `PR_SET_DUMPABLE=0`, and reports success.
-5. The UI shows the countdown and then the cleaning screen.
-6. The keyboard is released on any of these events:
+6. The UI switches to the cleaning screen and starts the timer.
+7. The keyboard is released on any of these events:
    - the selected duration ends;
    - the **Stop cleaning** button is pressed;
    - Esc is held for two seconds;
@@ -243,6 +258,10 @@ Closing the helper's file descriptors is enough for the kernel to drop the
 `EVIOCGRAB`, so the keyboard is restored even if the UI crashes. Holding the
 power button for several seconds still forces a hardware power-off at the
 firmware level, so the machine can always be turned off.
+
+When the touchpad is disabled too, the **Stop cleaning** button cannot be
+clicked because there is no pointer. Hold Esc for two seconds or wait for the
+timer to finish; the helper's hard maximum still applies.
 
 The helper does **not** read the evdev event stream. It uses `EVIOCGKEY` only to
 check whether keys are currently down, including the held-Esc release gesture.
@@ -315,6 +334,24 @@ Keys handled entirely inside the firmware cannot be blocked from userspace.
 Keys of an external keyboard are intentionally left working unless you selected
 that keyboard for cleaning.
 
+### The touchpad checkbox does not appear
+
+Only built-in touchpads are offered. The detection looks for pointer axes plus
+touch capabilities (`BTN_TOUCH`, `BTN_TOOL_FINGER`, multitouch axes), a touchpad
+name and an internal bus/path. Mice, external trackpads and touchscreens are
+rejected on purpose. Check what was detected with:
+
+```bash
+cylk --list-all
+```
+
+A `touchpad` line should be listed. If it is missing, the device may use an
+unusual name; open an issue with the output of `cylk --list-all` and
+`udevadm info --query=property --name=/dev/input/eventN`.
+
+If the touchpad is disabled during cleaning, the Stop button cannot be clicked.
+Hold Esc for two seconds or let the timer finish.
+
 ### Wayland window placement
 
 Wayland does not let applications set absolute window coordinates. The size is
@@ -347,9 +384,9 @@ As a last resort, switch to a virtual terminal or reboot.
 ```text
 src/main.c          CLI, application startup, stylesheet loading
 src/window.c        GTK4/libadwaita UI and state machine
-src/device.c        udev/sysfs keyboard discovery, scoring, and companions
+src/device.c        udev/sysfs discovery, scoring, touchpad and companions
 src/companion-keys.h  shared list of blocked hotkey and button codes
-src/config.c        persisted duration and manual device choice
+src/config.c        persisted duration, device choice and touchpad preference
 src/helper.c        pkexec subprocess and line protocol
 src/session.c       logind lock, suspend, and active-session monitor
 helper/cylk-helper.c  privileged grab/release helper
@@ -358,10 +395,10 @@ helper/cylk-helper.c  privileged grab/release helper
 The helper protocol is line based:
 
 ```text
-UI -> helper:  GRAB\t<path>\t<hold_ms>\t<max_seconds>[\t<companion>…]
+UI -> helper:  GRAB\t<path>\t<hold_ms>\t<max_seconds>[\t<companion>…][\tT:<touchpad>…]
 UI -> helper:  RELEASE
 UI -> helper:  QUIT
-helper -> UI:  READY\t2
+helper -> UI:  READY\t3
 helper -> UI:  OK\t<device name>
 helper -> UI:  RELEASED\t<reason>
 helper -> UI:  ERR\t<code>\t<message>
@@ -387,8 +424,8 @@ Fedora RPM:
 ```bash
 mkdir -p ~/rpmbuild/SOURCES
 git archive --format=tar.gz \
-  --prefix=clean-your-lap-keyboard-0.1.1/ \
-  -o ~/rpmbuild/SOURCES/clean-your-lap-keyboard-0.1.1.tar.gz HEAD
+  --prefix=clean-your-lap-keyboard-0.1.2/ \
+  -o ~/rpmbuild/SOURCES/clean-your-lap-keyboard-0.1.2.tar.gz HEAD
 rpmbuild -ba packaging/fedora/clean-your-lap-keyboard.spec
 ```
 

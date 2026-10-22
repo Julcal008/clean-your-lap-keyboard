@@ -24,11 +24,17 @@
     <keyword>clean</keyword>
     <keyword>laptop</keyword>
     <keyword>disable</keyword>
+    <keyword>touchpad</keyword>
   </keywords>
   <provides>
     <binary>cylk</binary>
   </provides>
   <releases>
+    <release version="0.1.2" date="2026-10-21">
+      <description>
+        <p>Optionally disable the built-in touchpad while cleaning, with automatic touchpad detection.</p>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-10-19">
       <description>
         <p>Also block media keys (volume, microphone, brightness) and the power button while cleaning.</p>

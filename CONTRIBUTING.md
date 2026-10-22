@@ -84,8 +84,8 @@ the output of `cylk --list-all` and `evtest` (never include passwords).
 The packages are built by GitHub Actions when a tag is pushed:
 
 ```bash
-git tag -a v0.1.1 -m "Clean Your Lap Keyboard 0.1.1"
-git push origin v0.1.1
+git tag -a v0.1.2 -m "Clean Your Lap Keyboard 0.1.2"
+git push origin v0.1.2
 ```
 
 The `Release` workflow builds the Fedora RPM, the Debian package and the Arch

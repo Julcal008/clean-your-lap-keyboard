@@ -57,6 +57,8 @@ reads (or logs) key events: it only grabs and waits.
 - a **companion** (`CYLK_DEVICE_COMPANION`): an auxiliary node that reports
   hotkeys (volume, mute, brightness, radio switches) or physical buttons
   (power, sleep). Companions are grabbed together with a keyboard.
+- a **touchpad** (`CYLK_DEVICE_TOUCHPAD`): an internal pointer that the user can
+  optionally disable together with the keyboard.
 
 ### How a keyboard is recognized
 
@@ -90,6 +92,23 @@ the chosen keyboard (`cylk_device_is_companion_candidate()`):
 A pointer, a second keyboard or a device without hotkey/button keys is never
 chosen as a companion.
 
+### How the touchpad is found
+
+`cylk_device_scan_touchpads()` keeps the nodes accepted by
+`cylk_device_is_touchpad_candidate()`:
+
+- they must have pointer axes (`REL_X/Y` or `ABS_X/Y`) and touch capabilities
+  (`BTN_TOUCH`, `BTN_TOOL_FINGER`, multitouch axes);
+- the name must look like a touchpad (`Touchpad`, `Trackpad`, `ClickPad`,
+  `GlidePoint`, ...) and must not say mouse or touchscreen;
+- `cylk_touchpad_score()` must reach the internal threshold: names and
+  i8042/serio/I2C paths add points, USB and Bluetooth subtract. A laptop that
+  wires the touchpad through USB is still accepted when it shares the physical
+  interface of the selected keyboard.
+
+The touchpad is only grabbed when the user ticks the checkbox, and the choice
+is persisted as `touchpad=true` in the settings file.
+
 ### Why the power button is included
 
 The power button lives on its own ACPI device (`event0`, `event3`, ...). If it
@@ -101,13 +120,19 @@ operating system.
 
 ## The grab
 
-When the user presses **Start cleaning**:
+When the user presses **Start cleaning**, the UI starts the helper. Once the
+helper prints `READY`, the UI runs the three-second countdown. When the
+countdown ends:
 
-1. `src/window.c` asks `cylk_device_scan_companions()` for the extra paths.
-2. It sends `GRAB <path> <hold_ms> <max_seconds> <companion> ...` to the helper.
+1. `src/window.c` uses the companion and touchpad paths that were computed when
+   the keyboard was selected.
+2. It sends `GRAB <path> <hold_ms> <max_seconds> <companion> ... T:<touchpad> ...`
+   to the helper.
 3. `helper/cylk-helper.c` opens every path, validates each one with
-   `is_full_keyboard()` / `is_companion_device()`, waits until all keys are
-   released and takes `EVIOCGRAB` on all of them.
+   `is_full_keyboard()`, `is_companion_device()` or `is_touchpad_device()`,
+   waits up to two seconds for all keys to be released and takes `EVIOCGRAB` on
+   all of them. Touchpads are excluded from the key-release wait because a
+   resting finger is not a pressed key.
 4. It then drops root, sets `PR_SET_NO_NEW_PRIVS` and clears the dumpable flag.
 5. It reports `OK` and enters a tiny loop that only waits for `RELEASE`, EOF,
    a held **Esc** or the maximum duration.
@@ -124,12 +149,16 @@ The keyboard is released when any of these happens:
 Closing the file descriptors is enough for the kernel to drop the grab, so a
 crash in the UI can never leave the keyboard disabled.
 
+When the touchpad is grabbed too, the **Stop** button cannot be clicked because
+the pointer is disabled. The emergency Esc hold, the timer and the helper's hard
+limit still release everything.
+
 ## Helper protocol
 
 Tab-separated lines over stdin/stdout:
 
 ```text
-UI -> helper : GRAB <path> <hold_ms> <max_seconds> [<companion> ...]
+UI -> helper : GRAB <path> <hold_ms> <max_seconds> [<companion> ...] [T:<touchpad> ...]
 UI -> helper : RELEASE
 UI -> helper : QUIT
 helper -> UI : READY <protocol-version>
@@ -138,9 +167,9 @@ helper -> UI : RELEASED <reason>
 helper -> UI : ERR <code> <message>
 ```
 
-`READY 2` is the current version. The version lets the UI detect an old helper
+`READY 3` is the current version. The version lets the UI detect an old helper
 installed next to a new application and refuse to continue instead of silently
-grabbing only the main keyboard.
+grabbing only the main keyboard or ignoring the touchpad.
 
 ## Adding a new blocked key
 
@@ -159,5 +188,8 @@ include the same header, the key is then recognized on both sides.
   soon as the grab is released.
 - Keys that the firmware handles entirely in hardware (without any evdev event)
   cannot be blocked from userspace.
+- Touchpad detection is heuristic and intentionally limited to built-in
+  touchpads. Disabling it also disables the pointer, so the in-app Stop button
+  cannot be clicked; use the Esc hold or let the timer finish.
 - Automatic detection is heuristic; the manual selector and `cylk --list-all`
   exist for the cases where it guesses wrong.

@@ -2,7 +2,8 @@
 
 Una aplicación Linux muy pequeña que desactiva temporalmente el **teclado
 integrado** de un portátil para poder limpiar las teclas con el equipo
-encendido. El panel táctil y los teclados externos siguen funcionando.
+encendido. El trackpad y los teclados externos siguen funcionando por defecto,
+y puedes desactivar también el trackpad con una casilla en la ventana.
 
 [English](README.md)
 
@@ -23,6 +24,8 @@ virtual reciban las pulsaciones.
 - Captura exclusiva y temporal del teclado interno.
 - Captura también los dispositivos auxiliares que emiten volumen, micrófono,
   brillo y los botones de encendido y suspensión.
+- Opcional: desactiva también el trackpad integrado con una casilla pequeña,
+  para que el puntero no se mueva mientras limpias. La elección se recuerda.
 - Detección automática del teclado interno y selector manual.
 - Ventana compacta de 400 × 580 con GTK4/libadwaita, tema claro/oscuro e idioma
   del sistema.
@@ -42,8 +45,11 @@ virtual reciban las pulsaciones.
 
 ## Lo que no hace
 
-- No desactiva el panel táctil ni un teclado externo USB/Bluetooth. Un teclado
-  externo solo se ve afectado si lo seleccionas para limpiar.
+- No desactiva el trackpad salvo que marques la casilla opcional, y nunca
+  desactiva un teclado externo USB/Bluetooth. Un teclado externo solo se ve
+  afectado si lo seleccionas para limpiar.
+- La opción del trackpad solo afecta a trackpads integrados. La detección
+  rechaza ratones, trackpads externos y pantallas táctiles.
 - No puede bloquear teclas que el firmware o el controlador embebido gestiona
   por completo en hardware sin emitir eventos evdev.
 - No lee, guarda ni transmite las pulsaciones. El helper solo captura los
@@ -61,7 +67,7 @@ virtual reciban las pulsaciones.
 - `pkexec` y un agente de autenticación polkit en la sesión.
 - Sesión de escritorio Wayland o X11.
 
-Distribuciones objetivo:
+Distribuciones objetivo (compiladas y probadas en CI):
 
 | Distribución | Notas |
 | --- | --- |
@@ -69,6 +75,9 @@ Distribuciones objetivo:
 | Ubuntu 24.04+ | Incluye GTK 4.8 / libadwaita 1.2. |
 | Debian 12+ | Bookworm tiene las versiones necesarias. |
 | Arch Linux | Los paquetes actuales son suficientes. |
+
+La ejecución real solo se ha confirmado en un ThinkPad con Fedora 44. Las demás
+se compilan y se prueban en CI, pero no se ha confirmado su ejecución.
 
 ## Instalación
 
@@ -78,13 +87,13 @@ Construye el RPM desde este repositorio (ver [Empaquetado](#empaquetado)) o
 instala un RPM de una versión publicada:
 
 ```bash
-sudo dnf install ./clean-your-lap-keyboard-0.1.1-1.fc44.x86_64.rpm
+sudo dnf install ./clean-your-lap-keyboard-0.1.2-1.fc44.x86_64.rpm
 ```
 
 ### Debian y Ubuntu
 
 ```bash
-sudo apt install ./clean-your-lap-keyboard_0.1.1-1_amd64.deb
+sudo apt install ./clean-your-lap-keyboard_0.1.2-1_amd64.deb
 ```
 
 ### Arch Linux
@@ -163,7 +172,7 @@ Los binarios compilados también se pueden ejecutar directamente:
 cylk [OPCIÓN…]
 
   -l, --list                 Muestra los teclados detectados y sale
-      --list-all             Muestra teclados y dispositivos auxiliares
+      --list-all             Muestra teclados, trackpads y auxiliares
   -d, --device=RUTA          Usa el teclado en RUTA
       --duration=SEGUNDOS    Duración: 30, 60 o 120 segundos
       --demo=ESTADO          Previsualiza idle, countdown, cleaning o done
@@ -189,8 +198,8 @@ dispositivo, el nombre, la puntuación, el bus y la ruta de hardware. La
 aplicación recuerda el teclado elegido manualmente en
 `~/.config/clean-your-lap-keyboard/settings.ini`.
 
-Para ver los dispositivos auxiliares que se capturan junto al teclado
-(volumen, brillo, botones de encendido), usa:
+Para ver el trackpad interno y los dispositivos auxiliares que se pueden
+capturar junto al teclado (volumen, brillo, botones de encendido), usa:
 
 ```bash
 cylk --list-all
@@ -198,6 +207,7 @@ cylk --list-all
 
 ```text
 internal	/dev/input/event4	AT Translated Set 2 keyboard	460	i8042	platform-i8042-serio-0
+touchpad	/dev/input/event8	SynPS/2 Synaptics TouchPad	260	i8042	platform-i8042-serio-1
 companion	/dev/input/event10	Video Bus	0	-	pci-0000:00:08.1
 companion	/dev/input/event13	ThinkPad Extra Buttons	0	-	platform-thinkpad_acpi
 external	/dev/input/event21	MOSART Semi. 2.4G Keyboard Mouse	-60	usb	pci-0000:07:00.4-usb-0:2:1.0
@@ -224,15 +234,18 @@ cylk --demo=done
 El flujo normal es:
 
 1. El usuario pulsa **Empezar limpieza**.
-2. La aplicación inicia `pkexec` y pide permiso a polkit.
-3. El helper abre el dispositivo evdev junto con los dispositivos auxiliares
-   (volumen, micrófono, brillo, botones de encendido y suspensión), comprueba
-   cada uno, espera a que se suelten todas las teclas y aplica `EVIOCGRAB` en
-   todos ellos.
-4. El helper baja privilegios al usuario que invocó `pkexec`, activa
+2. La aplicación inicia `pkexec` y espera a que el helper imprima `READY`.
+   Mientras tanto, la página de cuenta atrás muestra «Esperando permiso…».
+3. La aplicación ejecuta la cuenta atrás de tres segundos.
+4. Al terminar la cuenta atrás, la aplicación envía `GRAB`. El helper abre el
+   dispositivo evdev, los dispositivos auxiliares (volumen, micrófono, brillo,
+   botones de encendido y suspensión) y, si marcaste la casilla, el trackpad
+   interno. Comprueba cada uno, espera hasta dos segundos a que se suelten todas
+   las teclas y aplica `EVIOCGRAB` en todos ellos.
+5. El helper baja privilegios al usuario que invocó `pkexec`, activa
    `PR_SET_NO_NEW_PRIVS` y `PR_SET_DUMPABLE=0`, y confirma el éxito.
-5. La interfaz muestra la cuenta atrás y después la pantalla de limpieza.
-6. El teclado se libera en cualquiera de estos casos:
+6. La interfaz pasa a la pantalla de limpieza y arranca el temporizador.
+7. El teclado se libera en cualquiera de estos casos:
    - termina la duración elegida;
    - se pulsa **Detener limpieza**;
    - se mantiene Esc durante dos segundos;
@@ -246,6 +259,10 @@ Cerrar los descriptores del helper basta para que el kernel elimine el
 Mantener pulsado el botón de encendido durante varios segundos sigue forzando
 un apagado por hardware a nivel de firmware, así que el equipo siempre se puede
 apagar.
+
+Si también se desactiva el trackpad, el botón **Detener limpieza** no se puede
+pulsar porque no hay puntero. Mantén Esc durante dos segundos o espera a que
+termine el temporizador; el límite máximo del helper sigue aplicándose.
 
 El helper **no** lee el flujo de eventos evdev. Solo usa `EVIOCGKEY` para
 comprobar si hay teclas pulsadas, incluido el gesto de mantener Esc.
@@ -318,6 +335,24 @@ Las teclas que gestiona el firmware por completo no se pueden bloquear desde el
 espacio de usuario. Las teclas de un teclado externo se dejan funcionando a
 propósito salvo que hayas seleccionado ese teclado para limpiar.
 
+### No aparece la casilla del trackpad
+
+Solo se ofrecen trackpads integrados. La detección busca ejes de puntero y
+capacidades táctiles (`BTN_TOUCH`, `BTN_TOOL_FINGER`, ejes multitouch), un
+nombre de trackpad y un bus/ruta interno. Los ratones, trackpads externos y
+pantallas táctiles se rechazan a propósito. Comprueba qué se detectó con:
+
+```bash
+cylk --list-all
+```
+
+Debería aparecer una línea `touchpad`. Si no está, el dispositivo puede usar un
+nombre poco habitual; abre una incidencia con la salida de `cylk --list-all` y
+`udevadm info --query=property --name=/dev/input/eventN`.
+
+Si el trackpad se desactiva durante la limpieza, el botón Detener no se puede
+pulsar. Mantén Esc durante dos segundos o deja que termine el temporizador.
+
 ### Posición de la ventana en Wayland
 
 Wayland no permite fijar coordenadas absolutas. El tamaño es fijo, pero el
@@ -351,9 +386,9 @@ Como último recurso, cambia a una terminal virtual o reinicia.
 ```text
 src/main.c            CLI, arranque de la aplicación y carga del CSS
 src/window.c          Interfaz GTK4/libadwaita y máquina de estados
-src/device.c          Detección, puntuación y dispositivos auxiliares
+src/device.c          Detección, puntuación, trackpad y dispositivos auxiliares
 src/companion-keys.h  Lista compartida de teclas multimedia y de botón
-src/config.c          Duración y elección manual persistidas
+src/config.c          Duración, teclado y preferencia de trackpad persistidas
 src/helper.c          Proceso pkexec y protocolo de líneas
 src/session.c         Monitor de bloqueo, suspensión y sesión con logind
 helper/cylk-helper.c  Helper privilegiado de captura y liberación
@@ -362,10 +397,10 @@ helper/cylk-helper.c  Helper privilegiado de captura y liberación
 El protocolo del helper usa líneas:
 
 ```text
-UI -> helper:  GRAB\t<ruta>\t<hold_ms>\t<max_segundos>[\t<auxiliar>…]
+UI -> helper:  GRAB\t<ruta>\t<hold_ms>\t<max_segundos>[\t<auxiliar>…][\tT:<trackpad>…]
 UI -> helper:  RELEASE
 UI -> helper:  QUIT
-helper -> UI:  READY\t2
+helper -> UI:  READY\t3
 helper -> UI:  OK\t<nombre del dispositivo>
 helper -> UI:  RELEASED\t<motivo>
 helper -> UI:  ERR\t<código>\t<mensaje>
@@ -392,8 +427,8 @@ RPM de Fedora:
 ```bash
 mkdir -p ~/rpmbuild/SOURCES
 git archive --format=tar.gz \
-  --prefix=clean-your-lap-keyboard-0.1.1/ \
-  -o ~/rpmbuild/SOURCES/clean-your-lap-keyboard-0.1.1.tar.gz HEAD
+  --prefix=clean-your-lap-keyboard-0.1.2/ \
+  -o ~/rpmbuild/SOURCES/clean-your-lap-keyboard-0.1.2.tar.gz HEAD
 rpmbuild -ba packaging/fedora/clean-your-lap-keyboard.spec
 ```
 
