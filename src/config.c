@@ -2,9 +2,9 @@
 /*
  * User settings persistence.
  *
- * Stores the chosen duration and the manually selected keyboard in
- * $XDG_CONFIG_HOME/clean-your-lap-keyboard/settings.ini.  Loading is
- * best-effort: a missing or unreadable file just falls back to the defaults.
+ * Stores the chosen duration, the manually selected keyboard and the touchpad
+ * preference in $XDG_CONFIG_HOME/clean-your-lap-keyboard/settings.ini.  Loading
+ * is best-effort: a missing or unreadable file just falls back to the defaults.
  */
 
 #include "config.h"
@@ -36,6 +36,7 @@ cylk_config_load(void)
   gchar *path = config_path();
 
   config->duration = 60;
+  config->disable_touchpad = FALSE;
 
   if (g_file_test(path, G_FILE_TEST_IS_REGULAR) &&
       g_key_file_load_from_file(key_file, path, G_KEY_FILE_NONE, NULL)) {
@@ -44,6 +45,9 @@ cylk_config_load(void)
     if (error == NULL)
       config->duration = normalize_duration(duration);
     g_clear_error(&error);
+
+    config->disable_touchpad =
+        g_key_file_get_boolean(key_file, "general", "touchpad", NULL);
 
     gchar *device_id = g_key_file_get_string(key_file, "general", "device-id", NULL);
     if (device_id != NULL && *device_id != '\0')
@@ -72,6 +76,8 @@ cylk_config_save(CylkConfig *config)
 
   key_file = g_key_file_new();
   g_key_file_set_integer(key_file, "general", "duration", config->duration);
+  g_key_file_set_boolean(key_file, "general", "touchpad",
+                         config->disable_touchpad);
   if (config->device_id != NULL)
     g_key_file_set_string(key_file, "general", "device-id", config->device_id);
 

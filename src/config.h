@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Persisted settings: the cleaning duration and the device the user picked.
+ * Persisted settings: the cleaning duration, the device the user picked and
+ * whether the internal touchpad should be disabled too.
  */
 #pragma once
 
@@ -9,6 +10,7 @@
 typedef struct {
   gint duration;
   gchar *device_id;
+  gboolean disable_touchpad;
 } CylkConfig;
 
 CylkConfig *cylk_config_load(void);

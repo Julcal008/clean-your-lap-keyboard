@@ -110,6 +110,8 @@ list_keyboards(gboolean all)
 
     if (device->kind == CYLK_DEVICE_COMPANION)
       kind = "companion";
+    else if (device->kind == CYLK_DEVICE_TOUCHPAD)
+      kind = "touchpad";
     else
       kind = device->internal ? "internal" : "external";
 
@@ -230,7 +232,7 @@ main(int argc, char *argv[])
     { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list,
       N_("List detected keyboards and exit"), NULL },
     { "list-all", 0, 0, G_OPTION_ARG_NONE, &opt_list_all,
-      N_("List keyboards and companion hotkey devices and exit"), NULL },
+      N_("List keyboards, touchpads and companion hotkey devices and exit"), NULL },
     { "device", 'd', 0, G_OPTION_ARG_STRING, &opt_device,
       N_("Use the keyboard at PATH"), N_("PATH") },
     { "duration", 0, 0, G_OPTION_ARG_CALLBACK, validate_duration,

@@ -3,9 +3,10 @@
  * Input device model shared by the UI and the CLI.
  *
  * A CylkDevice is either a full keyboard (something the user can select to
- * clean) or a companion device (a hotkey/media/button node that is grabbed at
- * the same time).  The capability bitmaps are kept as the raw sysfs strings so
- * they can be queried with cylk_bitmap_has_key().
+ * clean), a touchpad (an optional internal pointer disabled on request) or a
+ * companion device (a hotkey/media/button node that is grabbed at the same
+ * time).  The capability bitmaps are kept as the raw sysfs strings so they can
+ * be queried with cylk_bitmap_has_key().
  */
 #pragma once
 
@@ -14,6 +15,7 @@
 typedef enum {
   CYLK_DEVICE_KEYBOARD,
   CYLK_DEVICE_COMPANION,
+  CYLK_DEVICE_TOUCHPAD,
 } CylkDeviceKind;
 
 typedef struct {
@@ -36,6 +38,8 @@ GPtrArray *cylk_device_scan(GError **error);
 GPtrArray *cylk_device_scan_all(GError **error);
 GPtrArray *cylk_device_scan_companions(const CylkDevice *primary,
                                        GError **error);
+GPtrArray *cylk_device_scan_touchpads(const CylkDevice *primary,
+                                      GError **error);
 void cylk_device_free(CylkDevice *device);
 
 const gchar *cylk_device_id(const CylkDevice *device);
@@ -47,9 +51,15 @@ gboolean cylk_bitmap_has_any_key(const gchar *capabilities,
 
 gboolean cylk_device_is_companion_candidate(const CylkDevice *candidate,
                                             const CylkDevice *primary);
+gboolean cylk_device_is_touchpad_candidate(const CylkDevice *candidate,
+                                           const CylkDevice *primary);
 
 gint cylk_device_score(const gchar *name,
                        const gchar *syspath,
                        const gchar *id_path,
                        const gchar *id_bus,
                        guint16 bustype);
+gint cylk_touchpad_score(const gchar *name,
+                         const gchar *syspath,
+                         const gchar *id_path,
+                         const gchar *id_bus);

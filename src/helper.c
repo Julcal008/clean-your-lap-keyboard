@@ -9,6 +9,7 @@
  *
  * Protocol (fields are separated by TAB):
  *   UI -> helper : GRAB <path> <hold_ms> <max_seconds> [<companion> ...]
+ *                                                       [T:<touchpad> ...]
  *   UI -> helper : RELEASE
  *   UI -> helper : QUIT
  *   helper -> UI : READY <protocol-version>
@@ -373,6 +374,7 @@ void
 cylk_helper_grab(CylkHelper *self,
                  const gchar *device_path,
                  GPtrArray *companion_paths,
+                 GPtrArray *touchpad_paths,
                  guint hold_ms,
                  guint max_seconds)
 {
@@ -403,6 +405,16 @@ cylk_helper_grab(CylkHelper *self,
       if (path == NULL || *path == '\0')
         continue;
       g_string_append_c(command, '\t');
+      g_string_append(command, path);
+    }
+  }
+
+  if (touchpad_paths != NULL) {
+    for (guint i = 0; i < touchpad_paths->len; i++) {
+      const gchar *path = g_ptr_array_index(touchpad_paths, i);
+      if (path == NULL || *path == '\0')
+        continue;
+      g_string_append(command, "\tT:");
       g_string_append(command, path);
     }
   }

@@ -32,6 +32,7 @@ typedef struct {
   CylkConfig *config;
   GPtrArray *devices;
   GPtrArray *companions;
+  GPtrArray *touchpads;
   CylkDevice *selected;
   CylkHelper *helper;
   CylkSession *session;
@@ -47,6 +48,8 @@ typedef struct {
   GtkWidget *device_name;
   GtkWidget *device_type;
   GtkWidget *companion_note;
+  GtkWidget *input_note;
+  GtkWidget *touchpad_check;
   GtkWidget *device_popover;
   GtkWidget *device_list;
   GtkWidget *start_button;
@@ -57,6 +60,7 @@ typedef struct {
   GtkWidget *ring;
   GtkWidget *ring_time;
   GtkWidget *stop_button;
+  GtkWidget *cleaning_subtitle;
 
   GtkWidget *done_icon;
   GtkWidget *done_title;
@@ -78,6 +82,7 @@ typedef struct {
   gboolean closing;
   gboolean demo_cleaning;
   gboolean completed;
+  gboolean request_touchpad;
 
   gchar *demo_mode;
   gchar *device_override;
@@ -86,6 +91,7 @@ typedef struct {
 G_DEFINE_TYPE_WITH_PRIVATE(CylkWindow, cylk_window, ADW_TYPE_APPLICATION_WINDOW)
 
 static void on_duration_toggled(GtkToggleButton *button, gpointer user_data);
+static void on_touchpad_toggled(GtkCheckButton *button, gpointer user_data);
 static void on_start_clicked(GtkButton *button, gpointer user_data);
 static void on_cancel_clicked(GtkButton *button, gpointer user_data);
 static void on_stop_clicked(GtkButton *button, gpointer user_data);
@@ -118,6 +124,10 @@ static void on_session_interrupted(CylkSession *session, const gchar *reason,
 
 static void update_device_card(CylkWindow *self);
 static void update_companions(CylkWindow *self);
+static void update_touchpads(CylkWindow *self);
+static void update_input_notes(CylkWindow *self);
+static void update_cleaning_subtitle(CylkWindow *self);
+static gboolean touchpad_requested(CylkWindow *self);
 static void rebuild_device_list(CylkWindow *self);
 static void cancel_countdown(CylkWindow *self);
 static void reset_to_idle(CylkWindow *self);
@@ -179,7 +189,8 @@ make_page(void)
 }
 
 static GtkWidget *
-make_icon_label(const gchar *icon_name, const gchar *text)
+make_icon_label(const gchar *icon_name, const gchar *text,
+                GtkWidget **label_out)
 {
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
   GtkWidget *icon = make_icon(icon_name, 13);
@@ -190,6 +201,10 @@ make_icon_label(const gchar *icon_name, const gchar *text)
   gtk_label_set_max_width_chars(GTK_LABEL(label), 34);
   gtk_box_append(GTK_BOX(box), icon);
   gtk_box_append(GTK_BOX(box), label);
+
+  if (label_out != NULL)
+    *label_out = label;
+
   return box;
 }
 
@@ -346,6 +361,17 @@ on_duration_toggled(GtkToggleButton *button, gpointer user_data)
 }
 
 static void
+on_touchpad_toggled(GtkCheckButton *button, gpointer user_data)
+{
+  CylkWindow *self = CYLK_WINDOW(user_data);
+  CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
+
+  priv->config->disable_touchpad = gtk_check_button_get_active(button);
+  cylk_config_save(priv->config);
+  update_input_notes(self);
+}
+
+static void
 build_idle_page(CylkWindow *self)
 {
   CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
@@ -355,6 +381,7 @@ build_idle_page(CylkWindow *self)
   GtkWidget *subtitle;
   GtkWidget *device_card;
   GtkWidget *duration;
+  GtkWidget *touchpad_check;
   GtkWidget *start;
   GtkWidget *notes = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
 
@@ -373,6 +400,16 @@ build_idle_page(CylkWindow *self)
   device_card = make_device_card(self);
   duration = make_duration_selector(self);
 
+  touchpad_check = gtk_check_button_new_with_label(
+      _("Also disable the touchpad"));
+  gtk_widget_add_css_class(touchpad_check, "cylk-check");
+  gtk_widget_set_halign(touchpad_check, GTK_ALIGN_CENTER);
+  gtk_check_button_set_active(GTK_CHECK_BUTTON(touchpad_check),
+                              priv->config->disable_touchpad);
+  gtk_widget_set_visible(touchpad_check, FALSE);
+  g_signal_connect(touchpad_check, "toggled",
+                   G_CALLBACK(on_touchpad_toggled), self);
+
   start = gtk_button_new_with_label(_("Start cleaning"));
   gtk_widget_add_css_class(start, "suggested-action");
   gtk_widget_add_css_class(start, "cylk-primary");
@@ -381,25 +418,29 @@ build_idle_page(CylkWindow *self)
 
   gtk_box_append(GTK_BOX(notes),
                  make_icon_label("input-keyboard-symbolic",
-                                 _("External keyboards and the touchpad stay active.")));
+                                 _("External keyboards and the touchpad stay active."),
+                                 &priv->input_note));
 
   priv->companion_note =
       make_icon_label("dialog-information-symbolic",
-                      _("Media keys and the power button are blocked too."));
+                      _("Media keys and the power button are blocked too."),
+                      NULL);
   gtk_widget_set_visible(priv->companion_note, FALSE);
   gtk_box_append(GTK_BOX(notes), priv->companion_note);
 
   gtk_box_append(GTK_BOX(notes),
                  make_icon_label("dialog-information-symbolic",
-                                 _("Hold Esc for 2 seconds to stop.")));
+                                 _("Hold Esc for 2 seconds to stop."), NULL));
 
   priv->start_button = start;
+  priv->touchpad_check = touchpad_check;
 
   gtk_box_append(GTK_BOX(page), hero);
   gtk_box_append(GTK_BOX(page), title);
   gtk_box_append(GTK_BOX(page), subtitle);
   gtk_box_append(GTK_BOX(page), device_card);
   gtk_box_append(GTK_BOX(page), duration);
+  gtk_box_append(GTK_BOX(page), touchpad_check);
   gtk_box_append(GTK_BOX(page), start);
   gtk_box_append(GTK_BOX(page), notes);
 
@@ -538,6 +579,7 @@ build_cleaning_page(CylkWindow *self)
   priv->ring = ring;
   priv->ring_time = time;
   priv->stop_button = stop;
+  priv->cleaning_subtitle = subtitle;
 
   gtk_box_append(GTK_BOX(page), overlay);
   gtk_box_append(GTK_BOX(page), title);
@@ -675,6 +717,97 @@ update_companions(CylkWindow *self)
   }
 }
 
+/*
+ * Recompute the internal touchpad that belongs to the selected keyboard.  The
+ * checkbox is only offered when one is actually detected.
+ */
+static void
+update_touchpads(CylkWindow *self)
+{
+  CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
+  GError *error = NULL;
+  gboolean available;
+
+  g_clear_pointer(&priv->touchpads, g_ptr_array_unref);
+
+  if (priv->selected != NULL) {
+    priv->touchpads = cylk_device_scan_touchpads(priv->selected, &error);
+    if (priv->touchpads == NULL) {
+      g_debug("touchpads: %s",
+              error != NULL ? error->message : "unknown error");
+      g_clear_error(&error);
+    }
+  }
+
+  available = priv->touchpads != NULL && priv->touchpads->len > 0;
+
+  if (priv->touchpad_check != NULL) {
+    gtk_widget_set_visible(priv->touchpad_check, available);
+
+    if (available) {
+      GString *tip = g_string_new(NULL);
+
+      for (guint i = 0; i < priv->touchpads->len; i++) {
+        CylkDevice *touchpad = g_ptr_array_index(priv->touchpads, i);
+        if (i > 0)
+          g_string_append_c(tip, '\n');
+        g_string_append(tip, touchpad->name);
+      }
+
+      gtk_widget_set_tooltip_text(priv->touchpad_check, tip->str);
+      g_string_free(tip, TRUE);
+    } else {
+      gtk_widget_set_tooltip_text(priv->touchpad_check, NULL);
+    }
+  }
+
+  update_input_notes(self);
+}
+
+/*
+ * Whether the current selection and checkbox state mean that the touchpad
+ * must be grabbed together with the keyboard.
+ */
+static gboolean
+touchpad_requested(CylkWindow *self)
+{
+  CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
+
+  return priv->touchpad_check != NULL &&
+         gtk_check_button_get_active(GTK_CHECK_BUTTON(priv->touchpad_check)) &&
+         priv->touchpads != NULL && priv->touchpads->len > 0;
+}
+
+static void
+update_input_notes(CylkWindow *self)
+{
+  CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
+
+  if (priv->input_note == NULL)
+    return;
+
+  gtk_label_set_text(
+      GTK_LABEL(priv->input_note),
+      touchpad_requested(self)
+          ? _("External keyboards stay active; the touchpad is disabled too.")
+          : _("External keyboards and the touchpad stay active."));
+}
+
+static void
+update_cleaning_subtitle(CylkWindow *self)
+{
+  CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
+
+  if (priv->cleaning_subtitle == NULL)
+    return;
+
+  gtk_label_set_text(
+      GTK_LABEL(priv->cleaning_subtitle),
+      priv->request_touchpad
+          ? _("Wipe the keys gently.\nThe touchpad is disabled too. Hold Esc to stop.")
+          : _("Wipe the keys gently.\nTouchpad and external keyboards still work."));
+}
+
 static void
 update_device_card(CylkWindow *self)
 {
@@ -738,6 +871,7 @@ on_device_row_activated(GtkListBox *list,
   cylk_config_set_device(priv->config, cylk_device_id(device));
   cylk_config_save(priv->config);
   update_companions(self);
+  update_touchpads(self);
   update_device_card(self);
   gtk_popover_popdown(GTK_POPOVER(priv->device_popover));
 }
@@ -834,6 +968,7 @@ load_devices(CylkWindow *self, const gchar *override)
     g_clear_error(&error);
     priv->selected = NULL;
     g_clear_pointer(&priv->companions, g_ptr_array_unref);
+    update_touchpads(self);
     update_device_card(self);
     rebuild_device_list(self);
     return;
@@ -880,6 +1015,7 @@ load_devices(CylkWindow *self, const gchar *override)
     show_toast(self, _("The requested keyboard was not found."));
 
   update_companions(self);
+  update_touchpads(self);
   update_device_card(self);
   rebuild_device_list(self);
 }
@@ -909,6 +1045,7 @@ cancel_countdown(CylkWindow *self)
   }
 
   priv->waiting_ready = FALSE;
+  priv->request_touchpad = FALSE;
 
   if (priv->helper != NULL) {
     cylk_helper_stop(priv->helper);
@@ -946,6 +1083,7 @@ reset_to_idle(CylkWindow *self)
   priv->release_sent = FALSE;
   priv->waiting_ready = FALSE;
   priv->completed = FALSE;
+  priv->request_touchpad = FALSE;
 
   gtk_button_set_label(GTK_BUTTON(priv->stop_button), _("Stop cleaning"));
   gtk_widget_set_sensitive(priv->stop_button, TRUE);
@@ -1000,11 +1138,13 @@ start_demo(CylkWindow *self)
   priv->clean_start_us = g_get_monotonic_time();
   priv->release_sent = FALSE;
   priv->completed = FALSE;
+  priv->request_touchpad = touchpad_requested(self);
 
   text = format_remaining(priv->duration);
   gtk_label_set_text(GTK_LABEL(priv->ring_time), text);
   g_free(text);
 
+  update_cleaning_subtitle(self);
   gtk_button_set_label(GTK_BUTTON(priv->stop_button), _("Stop cleaning"));
   gtk_widget_set_sensitive(priv->stop_button, TRUE);
   gtk_stack_set_visible_child_name(GTK_STACK(priv->stack), "cleaning");
@@ -1083,6 +1223,7 @@ begin_grab(CylkWindow *self)
 {
   CylkWindowPrivate *priv = cylk_window_get_instance_private(self);
   GPtrArray *paths;
+  GPtrArray *touchpad_paths;
 
   if (priv->helper == NULL || priv->selected == NULL) {
     show_toast(self, _("No keyboard detected."));
@@ -1098,8 +1239,17 @@ begin_grab(CylkWindow *self)
     }
   }
 
-  cylk_helper_grab(priv->helper, priv->selected->path, paths,
+  touchpad_paths = g_ptr_array_new();
+  if (priv->request_touchpad && priv->touchpads != NULL) {
+    for (guint i = 0; i < priv->touchpads->len; i++) {
+      CylkDevice *touchpad = g_ptr_array_index(priv->touchpads, i);
+      g_ptr_array_add(touchpad_paths, touchpad->path);
+    }
+  }
+
+  cylk_helper_grab(priv->helper, priv->selected->path, paths, touchpad_paths,
                    HOLD_ESCAPE_MS, priv->duration + 5);
+  g_ptr_array_unref(touchpad_paths);
   g_ptr_array_unref(paths);
 }
 
@@ -1191,6 +1341,8 @@ on_start_clicked(GtkButton *button, gpointer user_data)
     return;
   }
 
+  priv->request_touchpad = touchpad_requested(self);
+
   if (priv->helper != NULL) {
     cylk_helper_stop(priv->helper);
     g_clear_object(&priv->helper);
@@ -1255,6 +1407,12 @@ on_helper_ready(CylkHelper *helper, gpointer user_data)
     return;
   }
 
+  if (priv->request_touchpad && cylk_helper_protocol_version(helper) < 3) {
+    show_toast(self, _("The helper is outdated. Reinstall the application."));
+    cancel_countdown(self);
+    return;
+  }
+
   priv->waiting_ready = FALSE;
   begin_countdown(self);
 }
@@ -1276,6 +1434,7 @@ on_helper_grabbed(CylkHelper *helper, const gchar *name, gpointer user_data)
   priv->completed = FALSE;
   priv->clean_start_us = g_get_monotonic_time();
 
+  update_cleaning_subtitle(self);
   gtk_button_set_label(GTK_BUTTON(priv->stop_button), _("Stop cleaning"));
   gtk_widget_set_sensitive(priv->stop_button, TRUE);
   gtk_stack_set_visible_child_name(GTK_STACK(priv->stack), "cleaning");
@@ -1567,6 +1726,7 @@ cylk_window_dispose(GObject *object)
   g_clear_object(&priv->session);
   g_clear_pointer(&priv->devices, g_ptr_array_unref);
   g_clear_pointer(&priv->companions, g_ptr_array_unref);
+  g_clear_pointer(&priv->touchpads, g_ptr_array_unref);
   g_clear_pointer(&priv->config, cylk_config_free);
   g_free(priv->demo_mode);
   g_free(priv->device_override);

@@ -21,6 +21,7 @@ gboolean cylk_helper_start(CylkHelper *self, GError **error);
 void cylk_helper_grab(CylkHelper *self,
                       const gchar *device_path,
                       GPtrArray *companion_paths,
+                      GPtrArray *touchpad_paths,
                       guint hold_ms,
                       guint max_seconds);
 void cylk_helper_release(CylkHelper *self);

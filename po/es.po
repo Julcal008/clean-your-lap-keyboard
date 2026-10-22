@@ -4,10 +4,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: clean-your-lap-keyboard 0.1.1\n"
+"Project-Id-Version: clean-your-lap-keyboard 0.1.2\n"
 "Report-Msgid-Bugs-To: https://github.com/julcal008/clean-your-lap-keyboard/issues\n"
-"POT-Creation-Date: 2026-10-19 00:00+0000\n"
-"PO-Revision-Date: 2026-10-19 00:00+0000\n"
+"POT-Creation-Date: 2026-10-21 00:00+0000\n"
+"PO-Revision-Date: 2026-10-21 00:00+0000\n"
 "Last-Translator: Julcal008 <julcalderon3008@gmail.com>\n"
 "Language-Team: Spanish\n"
 "Language: es\n"
@@ -41,8 +41,8 @@ msgid "List detected keyboards and exit"
 msgstr "Muestra los teclados detectados y sale"
 
 #: src/main.c
-msgid "List keyboards and companion hotkey devices and exit"
-msgstr "Muestra los teclados y los dispositivos auxiliares y sale"
+msgid "List keyboards, touchpads and companion hotkey devices and exit"
+msgstr "Muestra los teclados, los trackpads y los dispositivos auxiliares y sale"
 
 #: src/main.c
 msgid "Use the keyboard at PATH"
@@ -101,6 +101,10 @@ msgid "2 min"
 msgstr "2 min"
 
 #: src/window.c
+msgid "Also disable the touchpad"
+msgstr "Desactivar también el trackpad"
+
+#: src/window.c
 msgid "Clean your keyboard"
 msgstr "Limpia tu teclado"
 
@@ -114,7 +118,11 @@ msgstr "Empezar limpieza"
 
 #: src/window.c
 msgid "External keyboards and the touchpad stay active."
-msgstr "Los teclados externos y el panel táctil siguen activos."
+msgstr "Los teclados externos y el trackpad siguen activos."
+
+#: src/window.c
+msgid "External keyboards stay active; the touchpad is disabled too."
+msgstr "Los teclados externos siguen activos; el trackpad también se desactivará."
 
 #: src/window.c
 msgid "Media keys and the power button are blocked too."
@@ -142,7 +150,11 @@ msgstr "Teclado desactivado"
 
 #: src/window.c
 msgid "Wipe the keys gently.\nTouchpad and external keyboards still work."
-msgstr "Limpia las teclas con suavidad.\nEl panel táctil y los teclados externos siguen funcionando."
+msgstr "Limpia las teclas con suavidad.\nEl trackpad y los teclados externos siguen funcionando."
+
+#: src/window.c
+msgid "Wipe the keys gently.\nThe touchpad is disabled too. Hold Esc to stop."
+msgstr "Limpia las teclas con suavidad.\nEl trackpad también está desactivado. Mantén Esc para detener."
 
 #: src/window.c
 msgid "Cleaning mode active"

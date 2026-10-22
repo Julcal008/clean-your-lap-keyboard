@@ -5,7 +5,9 @@
  * Walks /sys/class/input through libudev, reads each device's capabilities from
  * sysfs and builds the list of usable keyboards.  It also finds the auxiliary
  * "companion" devices (volume, brightness, power button, ...) that belong to
- * the same hardware as a given keyboard, so the helper can grab them together.
+ * the same hardware as a given keyboard and the internal touchpad that the
+ * user may choose to disable together with it, so the helper can grab them
+ * together.
  *
  * Everything here is read-only: no device is opened or grabbed from this file.
  */
@@ -130,7 +132,9 @@ has_pointer_axes(const CylkDevice *device)
   return cylk_bitmap_has_key(device->rel_caps, REL_X) ||
          cylk_bitmap_has_key(device->rel_caps, REL_Y) ||
          cylk_bitmap_has_key(device->abs_caps, ABS_X) ||
-         cylk_bitmap_has_key(device->abs_caps, ABS_Y);
+         cylk_bitmap_has_key(device->abs_caps, ABS_Y) ||
+         cylk_bitmap_has_key(device->abs_caps, ABS_MT_POSITION_X) ||
+         cylk_bitmap_has_key(device->abs_caps, ABS_MT_POSITION_Y);
 }
 
 static gboolean
@@ -140,6 +144,49 @@ has_companion_keys(const gchar *key_caps)
                                  G_N_ELEMENTS(cylk_companion_keys)) ||
          cylk_bitmap_has_any_key(key_caps, cylk_button_keys,
                                  G_N_ELEMENTS(cylk_button_keys));
+}
+
+/*
+ * Touchpads are named after the hardware in almost every laptop, which is the
+ * most reliable signal available in sysfs.  Reject mice and touchscreens
+ * explicitly so an external pointer or a touch-enabled panel is never grabbed.
+ */
+static gboolean
+has_touchpad_name(const gchar *name)
+{
+  if (name == NULL)
+    return FALSE;
+
+  if (contains_ci(name, "touchscreen") || contains_ci(name, "touch screen") ||
+      contains_ci(name, "mouse"))
+    return FALSE;
+
+  return contains_ci(name, "touchpad") || contains_ci(name, "touch pad") ||
+         contains_ci(name, "trackpad") || contains_ci(name, "track pad") ||
+         contains_ci(name, "clickpad") || contains_ci(name, "glidepoint");
+}
+
+/*
+ * A touchpad is a pointer that reports touches through BTN_TOUCH/BTN_TOOL_* or
+ * through multitouch axes.  A plain mouse has axes but none of these.
+ */
+static gboolean
+has_touchpad_capabilities(const CylkDevice *device)
+{
+  static const guint touch_keys[] = {
+    BTN_TOUCH, BTN_TOOL_FINGER, BTN_TOOL_DOUBLETAP, BTN_TOOL_TRIPLETAP,
+  };
+  static const guint multitouch_axes[] = {
+    ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
+  };
+
+  if (!has_pointer_axes(device))
+    return FALSE;
+
+  return cylk_bitmap_has_any_key(device->key_caps, touch_keys,
+                                 G_N_ELEMENTS(touch_keys)) ||
+         cylk_bitmap_has_any_key(device->abs_caps, multitouch_axes,
+                                 G_N_ELEMENTS(multitouch_axes));
 }
 
 static gboolean
@@ -229,6 +276,67 @@ cylk_device_score(const gchar *name,
   return score;
 }
 
+/*
+ * Heuristic score used to recognise the built-in touchpad.
+ *
+ * The name is the strongest hint, while i8042/serio and I2C paths identify
+ * integrated hardware.  USB and Bluetooth pointers are pushed below the
+ * internal threshold so an external mouse or trackpad is never captured.
+ */
+gint
+cylk_touchpad_score(const gchar *name,
+                    const gchar *syspath,
+                    const gchar *id_path,
+                    const gchar *id_bus)
+{
+  gint score = 0;
+  gboolean external = FALSE;
+
+  if (name != NULL) {
+    if (contains_ci(name, "touchpad") || contains_ci(name, "touch pad") ||
+        contains_ci(name, "trackpad") || contains_ci(name, "track pad") ||
+        contains_ci(name, "clickpad") || contains_ci(name, "glidepoint"))
+      score += 120;
+
+    if (contains_ci(name, "synaptics") || contains_ci(name, "elan") ||
+        contains_ci(name, "alps") || contains_ci(name, "cypress") ||
+        contains_ci(name, "precision"))
+      score += 60;
+
+    if (contains_ci(name, "mouse") || contains_ci(name, "touchscreen") ||
+        contains_ci(name, "touch screen"))
+      score -= 200;
+  }
+
+  if (id_bus != NULL &&
+      (g_ascii_strcasecmp(id_bus, "usb") == 0 ||
+       g_ascii_strcasecmp(id_bus, "bluetooth") == 0))
+    external = TRUE;
+
+  if (id_path != NULL) {
+    if (strstr(id_path, "i8042") != NULL || strstr(id_path, "serio") != NULL)
+      score += 80;
+    if (strstr(id_path, "i2c") != NULL)
+      score += 70;
+    if (strstr(id_path, "usb") != NULL || strstr(id_path, "bluetooth") != NULL)
+      external = TRUE;
+  }
+
+  if (syspath != NULL) {
+    if (strstr(syspath, "i8042") != NULL || strstr(syspath, "serio") != NULL)
+      score += 80;
+    if (strstr(syspath, "i2c") != NULL)
+      score += 70;
+    if (strstr(syspath, "usb") != NULL || strstr(syspath, "bluetooth") != NULL)
+      external = TRUE;
+  }
+
+  if (external)
+    score -= 150;
+
+  return score;
+}
+
 const gchar *
 cylk_device_id(const CylkDevice *device)
 {
@@ -258,13 +366,28 @@ cylk_device_free(CylkDevice *device)
 }
 
 static gint
+device_kind_rank(CylkDeviceKind kind)
+{
+  switch (kind) {
+  case CYLK_DEVICE_KEYBOARD:
+    return 0;
+  case CYLK_DEVICE_TOUCHPAD:
+    return 1;
+  case CYLK_DEVICE_COMPANION:
+    return 2;
+  }
+
+  return 3;
+}
+
+static gint
 compare_devices(gconstpointer a, gconstpointer b)
 {
   const CylkDevice *da = *(CylkDevice *const *) a;
   const CylkDevice *db = *(CylkDevice *const *) b;
 
   if (da->kind != db->kind)
-    return da->kind == CYLK_DEVICE_KEYBOARD ? -1 : 1;
+    return device_kind_rank(da->kind) - device_kind_rank(db->kind);
 
   if (da->score != db->score)
     return db->score - da->score;
@@ -383,6 +506,37 @@ cylk_device_is_companion_candidate(const CylkDevice *candidate,
   return devices_share_hardware(primary, candidate);
 }
 
+/*
+ * Pure predicate: is "candidate" the built-in touchpad of the laptop?
+ *
+ * Besides the name and capabilities, the score must clear the internal
+ * threshold.  A laptop whose touchpad is wired through USB is still accepted
+ * when it shares the same physical interface as the selected keyboard.
+ */
+gboolean
+cylk_device_is_touchpad_candidate(const CylkDevice *candidate,
+                                  const CylkDevice *primary)
+{
+  g_return_val_if_fail(candidate != NULL, FALSE);
+
+  if (primary != NULL && g_strcmp0(candidate->path, primary->path) == 0)
+    return FALSE;
+
+  if (has_full_keyboard_capabilities(candidate->key_caps))
+    return FALSE;
+
+  if (!has_touchpad_name(candidate->name) ||
+      !has_touchpad_capabilities(candidate))
+    return FALSE;
+
+  if (cylk_touchpad_score(candidate->name, candidate->syspath,
+                          candidate->id_path, candidate->id_bus) >=
+      INTERNAL_SCORE_THRESHOLD)
+    return TRUE;
+
+  return primary != NULL && devices_share_hardware(primary, candidate);
+}
+
 static gboolean
 ev_has_key(const gchar *ev_caps)
 {
@@ -392,8 +546,9 @@ ev_has_key(const gchar *ev_caps)
 }
 
 /*
- * Enumerate every usable keyboard and every companion hotkey/button device.
- * The returned array is sorted and owns its CylkDevice objects.
+ * Enumerate every usable keyboard, every internal touchpad and every companion
+ * hotkey/button device.  The returned array is sorted and owns its CylkDevice
+ * objects.
  */
 GPtrArray *
 cylk_device_scan_all(GError **error)
@@ -440,6 +595,7 @@ cylk_device_scan_all(GError **error)
     gchar *phys;
     gchar *bustype_string;
     gboolean is_keyboard;
+    gboolean is_touchpad;
     CylkDevice *device;
 
     udev_device = udev_device_new_from_syspath(udev, syspath);
@@ -476,34 +632,52 @@ cylk_device_scan_all(GError **error)
     is_keyboard = has_full_keyboard_capabilities(key_caps) &&
                   !is_excluded_name(name);
 
+    id_path = g_strdup(udev_device_get_property_value(udev_device, "ID_PATH"));
+    id_bus = g_strdup(udev_device_get_property_value(udev_device, "ID_BUS"));
+    phys = read_sysfs_string(syspath, "device/phys");
+    bustype_string = read_sysfs_string(syspath, "device/id/bustype");
+
+    is_touchpad = FALSE;
+
     if (!is_keyboard) {
-      CylkDevice companion;
+      CylkDevice probe;
       gboolean is_companion;
 
-      memset(&companion, 0, sizeof companion);
-      companion.name = name;
-      companion.key_caps = key_caps;
-      companion.rel_caps = rel_caps;
-      companion.abs_caps = abs_caps;
-      is_companion = !has_full_keyboard_capabilities(key_caps) &&
-                     !has_pointer_axes(&companion) &&
-                     has_companion_keys(key_caps);
+      memset(&probe, 0, sizeof probe);
+      probe.name = name;
+      probe.path = (gchar *) devnode;
+      probe.syspath = (gchar *) syspath;
+      probe.id_path = id_path;
+      probe.id_bus = id_bus;
+      probe.key_caps = key_caps;
+      probe.rel_caps = rel_caps;
+      probe.abs_caps = abs_caps;
 
-      if (!is_companion) {
+      /*
+       * Classify by name and capabilities here.  The internal/external
+       * decision needs the selected keyboard, so it is applied later by
+       * cylk_device_is_touchpad_candidate().  This keeps USB-wired internal
+       * touchpads in the list so they can match the keyboard's interface.
+       */
+      is_touchpad = !has_full_keyboard_capabilities(key_caps) &&
+                    has_touchpad_name(name) && has_touchpad_capabilities(&probe);
+      is_companion = !is_touchpad && !has_full_keyboard_capabilities(key_caps) &&
+                     !has_pointer_axes(&probe) && has_companion_keys(key_caps);
+
+      if (!is_touchpad && !is_companion) {
         g_free(name);
         g_free(key_caps);
         g_free(ev_caps);
         g_free(rel_caps);
         g_free(abs_caps);
+        g_free(id_path);
+        g_free(id_bus);
+        g_free(phys);
+        g_free(bustype_string);
         udev_device_unref(udev_device);
         continue;
       }
     }
-
-    id_path = g_strdup(udev_device_get_property_value(udev_device, "ID_PATH"));
-    id_bus = g_strdup(udev_device_get_property_value(udev_device, "ID_BUS"));
-    phys = read_sysfs_string(syspath, "device/phys");
-    bustype_string = read_sysfs_string(syspath, "device/id/bustype");
 
     device = g_new0(CylkDevice, 1);
     device->name = g_strdup(name);
@@ -516,11 +690,17 @@ cylk_device_scan_all(GError **error)
     device->rel_caps = rel_caps;
     device->abs_caps = abs_caps;
     device->bustype = parse_bustype(bustype_string);
-    device->score = cylk_device_score(device->name, device->syspath,
-                                      device->id_path, device->id_bus,
-                                      device->bustype);
+    device->kind = is_keyboard  ? CYLK_DEVICE_KEYBOARD
+                   : is_touchpad ? CYLK_DEVICE_TOUCHPAD
+                                 : CYLK_DEVICE_COMPANION;
+    if (device->kind == CYLK_DEVICE_TOUCHPAD)
+      device->score = cylk_touchpad_score(device->name, device->syspath,
+                                          device->id_path, device->id_bus);
+    else
+      device->score = cylk_device_score(device->name, device->syspath,
+                                        device->id_path, device->id_bus,
+                                        device->bustype);
     device->internal = device->score >= INTERNAL_SCORE_THRESHOLD;
-    device->kind = is_keyboard ? CYLK_DEVICE_KEYBOARD : CYLK_DEVICE_COMPANION;
 
     g_ptr_array_add(devices, device);
 
@@ -575,6 +755,31 @@ cylk_device_scan_companions(const CylkDevice *primary, GError **error)
   for (guint i = devices->len; i > 0; i--) {
     CylkDevice *device = g_ptr_array_index(devices, i - 1);
     if (!cylk_device_is_companion_candidate(device, primary))
+      g_ptr_array_remove_index(devices, i - 1);
+  }
+
+  return devices;
+}
+
+/*
+ * Enumerate the internal touchpads that belong to the same laptop as the given
+ * primary keyboard.  Usually there is exactly one, but some machines expose
+ * both a legacy and a multitouch node.
+ */
+GPtrArray *
+cylk_device_scan_touchpads(const CylkDevice *primary, GError **error)
+{
+  GPtrArray *devices;
+
+  g_return_val_if_fail(primary != NULL, NULL);
+
+  devices = cylk_device_scan_all(error);
+  if (devices == NULL)
+    return NULL;
+
+  for (guint i = devices->len; i > 0; i--) {
+    CylkDevice *device = g_ptr_array_index(devices, i - 1);
+    if (!cylk_device_is_touchpad_candidate(device, primary))
       g_ptr_array_remove_index(devices, i - 1);
   }
 

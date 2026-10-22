@@ -2,12 +2,12 @@
 /*
  * cylk-helper: minimal privileged helper for Clean Your Lap Keyboard.
  *
- * It receives a single GRAB command over stdin with the main keyboard device
- * and an optional list of companion hotkey devices (volume, brightness, power
- * button, ...).  It opens every device, takes an exclusive grab on all of
- * them, drops privileges to the invoking user and then only waits for RELEASE,
- * EOF, the emergency Escape hold or the maximum duration.  It never reads the
- * evdev event stream and never logs key data.
+ * It receives a single GRAB command over stdin with the main keyboard device,
+ * an optional list of companion hotkey devices (volume, brightness, power
+ * button, ...) and an optional internal touchpad.  It opens every device, takes
+ * an exclusive grab on all of them, drops privileges to the invoking user and
+ * then only waits for RELEASE, EOF, the emergency Escape hold or the maximum
+ * duration.  It never reads the evdev event stream and never logs key data.
  */
 
 #include "src/companion-keys.h"
@@ -37,15 +37,17 @@
 #define EVENT_PREFIX "/dev/input/event"
 #define MAX_LINE 2048
 #define MAX_COMPANIONS 8
+#define MAX_TOUCHPADS 4
 #define KEY_WORDS (KEY_CNT / (8 * sizeof(unsigned long)) + 1)
 
 typedef struct {
   int fd;
   char path[PATH_MAX];
   char name[256];
+  bool touchpad;
 } grab_target;
 
-static grab_target targets[MAX_COMPANIONS + 1];
+static grab_target targets[MAX_COMPANIONS + MAX_TOUCHPADS + 1];
 static size_t n_targets = 0;
 static volatile sig_atomic_t stop_requested = 0;
 
@@ -211,6 +213,59 @@ is_companion_device(int fd)
                      sizeof cylk_button_keys / sizeof cylk_button_keys[0]);
 }
 
+/*
+ * Decide whether an already-open fd may be grabbed as the built-in touchpad.
+ * It must be a pointer (relative or absolute axes), must expose touch
+ * capabilities and must not be a full keyboard.  A plain mouse is rejected
+ * because it has no touch keys.
+ */
+static bool
+is_touchpad_device(int fd)
+{
+  static const unsigned int touch_keys[] = {
+    BTN_TOUCH, BTN_TOOL_FINGER, BTN_TOOL_DOUBLETAP, BTN_TOOL_TRIPLETAP,
+  };
+  static const unsigned int multitouch_axes[] = {
+    ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
+  };
+  unsigned long evbits[(EV_MAX / (8 * sizeof(unsigned long))) + 1] = { 0 };
+  unsigned long keybits[KEY_WORDS] = { 0 };
+  unsigned long relbits[(REL_MAX / (8 * sizeof(unsigned long))) + 1] = { 0 };
+  unsigned long absbits[(ABS_MAX / (8 * sizeof(unsigned long))) + 1] = { 0 };
+  bool has_axes = false;
+
+  if (ioctl(fd, EVIOCGBIT(0, sizeof evbits), evbits) < 0)
+    return false;
+
+  if (!test_bit(evbits, EV_KEY))
+    return false;
+
+  if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keybits), keybits) < 0)
+    return false;
+
+  if (ioctl(fd, EVIOCGBIT(EV_REL, sizeof relbits), relbits) >= 0) {
+    if (test_bit(relbits, REL_X) || test_bit(relbits, REL_Y))
+      has_axes = true;
+  }
+  if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof absbits), absbits) >= 0) {
+    if (test_bit(absbits, ABS_X) || test_bit(absbits, ABS_Y) ||
+        test_bit(absbits, ABS_MT_POSITION_X) ||
+        test_bit(absbits, ABS_MT_POSITION_Y))
+      has_axes = true;
+  }
+
+  if (!has_axes)
+    return false;
+
+  if (is_full_keyboard(fd))
+    return false;
+
+  return has_any_bit(keybits, touch_keys,
+                     sizeof touch_keys / sizeof touch_keys[0]) ||
+         has_any_bit(absbits, multitouch_axes,
+                     sizeof multitouch_axes / sizeof multitouch_axes[0]);
+}
+
 static bool
 any_key_down(int fd)
 {
@@ -320,7 +375,8 @@ sanitize_name(char *name)
 }
 
 static int
-open_target(const char *path, bool primary, char *error, size_t error_size)
+open_target(const char *path, bool primary, bool touchpad, char *error,
+            size_t error_size)
 {
   char resolved[PATH_MAX];
   char name[256] = { 0 };
@@ -351,14 +407,19 @@ open_target(const char *path, bool primary, char *error, size_t error_size)
   }
   sanitize_name(name);
 
-  if (primary ? !is_full_keyboard(fd) : !is_companion_device(fd)) {
+  if (primary ? !is_full_keyboard(fd)
+              : touchpad ? !is_touchpad_device(fd)
+                         : !is_companion_device(fd)) {
     snprintf(error, error_size, "%s is not %s", name,
-             primary ? "a full keyboard" : "a supported hotkey device");
+             primary    ? "a full keyboard"
+             : touchpad ? "a touchpad"
+                        : "a supported hotkey device");
     close(fd);
     return -1;
   }
 
   targets[n_targets].fd = fd;
+  targets[n_targets].touchpad = touchpad;
   snprintf(targets[n_targets].path, sizeof targets[n_targets].path, "%s",
            resolved);
   snprintf(targets[n_targets].name, sizeof targets[n_targets].name, "%s", name);
@@ -375,6 +436,10 @@ wait_for_release_of_keys(void)
     bool down = false;
 
     for (size_t i = 0; i < n_targets; i++) {
+      /* A finger resting on the touchpad is not a pressed key. */
+      if (targets[i].touchpad)
+        continue;
+
       if (any_key_down(targets[i].fd)) {
         down = true;
         break;
@@ -412,7 +477,7 @@ main(void)
   if (getppid() == 1)
     return 1;
 
-  printf("READY\t2\n");
+  printf("READY\t3\n");
   fflush(stdout);
 
   handshake_deadline = now_ms() + 15000;
@@ -421,7 +486,9 @@ main(void)
     struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
     char primary[PATH_MAX];
     char extras[MAX_COMPANIONS][PATH_MAX];
+    char touchpads[MAX_TOUCHPADS][PATH_MAX];
     size_t n_extras = 0;
+    size_t n_touchpads = 0;
     char *saveptr = NULL;
     char *token;
     char error[PATH_MAX + 128];
@@ -482,6 +549,21 @@ main(void)
     while ((token = strtok_r(NULL, "\t", &saveptr)) != NULL) {
       if (*token == '\0')
         continue;
+
+      if (strncmp(token, "T:", 2) == 0) {
+        if (token[2] == '\0') {
+          send_error("protocol", "Malformed touchpad device");
+          return 1;
+        }
+        if (n_touchpads >= MAX_TOUCHPADS) {
+          send_error("protocol", "Too many touchpad devices");
+          return 1;
+        }
+        snprintf(touchpads[n_touchpads], PATH_MAX, "%s", token + 2);
+        n_touchpads++;
+        continue;
+      }
+
       if (n_extras >= MAX_COMPANIONS) {
         send_error("protocol", "Too many companion devices");
         return 1;
@@ -501,14 +583,22 @@ main(void)
 
     n_targets = 0;
 
-    if (open_target(primary, true, error, sizeof error) != 0) {
+    if (open_target(primary, true, false, error, sizeof error) != 0) {
       send_error("not-keyboard", "%s", error);
       close_all();
       return 1;
     }
 
     for (size_t i = 0; i < n_extras; i++) {
-      if (open_target(extras[i], false, error, sizeof error) != 0) {
+      if (open_target(extras[i], false, false, error, sizeof error) != 0) {
+        send_error("device", "%s", error);
+        close_all();
+        return 1;
+      }
+    }
+
+    for (size_t i = 0; i < n_touchpads; i++) {
+      if (open_target(touchpads[i], false, true, error, sizeof error) != 0) {
         send_error("device", "%s", error);
         close_all();
         return 1;
