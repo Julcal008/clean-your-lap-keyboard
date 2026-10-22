@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-10-21
+
+### Added
+
+- Optional checkbox to disable the built-in touchpad together with the
+  keyboard, so the pointer does not move while cleaning. The preference is
+  remembered between runs and starts disabled.
+- Internal touchpad detection based on pointer axes, touch capabilities, device
+  name, and internal bus/path. Mice, external trackpads, and touchscreens are
+  intentionally rejected.
+- `cylk --list-all` now also lists the detected touchpad.
+- Helper protocol version 3: touchpad paths are sent with a `T:` prefix and
+  validated with `is_touchpad_device()` on the privileged side.
+
+### Changed
+
+- The cleaning screen subtitle now reflects whether the touchpad is disabled and
+  reminds the user to hold Esc to stop when the pointer is unavailable.
+
 ## [0.1.1] - 2026-10-19
 
 ### Fixed
@@ -44,5 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests for keyboard scoring and capability bitmap parsing.
 - GitHub Actions CI for Fedora, Debian, Ubuntu, and Arch Linux.
 
+[0.1.2]: https://github.com/julcal008/clean-your-lap-keyboard/releases/tag/v0.1.2
 [0.1.1]: https://github.com/julcal008/clean-your-lap-keyboard/releases/tag/v0.1.1
 [0.1.0]: https://github.com/julcal008/clean-your-lap-keyboard/releases/tag/v0.1.0
